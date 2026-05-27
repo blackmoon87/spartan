@@ -7,7 +7,7 @@ You are assisting a developer in a custom, lightweight, modern PHP MVC boilerpla
 > Never code based on generic framework assumptions (such as Laravel, Symfony, or Yii defaults). You MUST strictly adhere to the custom Spartan API.
 > - **Zero-Dependency Core (Optional vendor/)**: The core framework is designed to run 100% on native PHP with a custom built-in autoloader. However, external composer packages are fully supported and can be utilized or recommended if a feature or test specifically requires specialized external libraries.
 > - **No Generic Helpers**: Do NOT use helper functions like `view()`, `request()`, `response()`, `redirect()`, `session()`, `env()`, or `config()` unless they are explicitly defined in Spartan's core.
-> - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions.
+> - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_FILES`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions (e.g. `$request->file('avatar')` to retrieve uploaded files).
 > - **No Native Redirects/Headers**: Never call `header("Location: ...")` or `http_response_code()`. Always route redirects and status codes through the `Response` object.
 > - **No Implicit ORM Magic**: Never assume implicit relationship mappings or auto-resolved table names. Always explicitly define table names, foreign keys, and relationship aliases.
 > - **No Auto-installed Packages**: Do not import or assume third-party library namespaces (e.g. Carbon for dates, Illuminate components) unless explicitly instructed. Use native PHP objects.
@@ -103,6 +103,14 @@ Follow these specifications and structural rules when writing, refactoring, or g
 - Use `$this->redirect('/path')` and `$this->json($data)` shortcuts instead of calling Response directly.
 - Render views using `$this->render('view_name', ['param' => $value])`.
 - For HTMX / AJAX updates, use the shortcut `$this->renderViewOnly('view_name', ['param' => $value])` to compile and return the partial template content without layout wrapping.
+
+### Request & File Uploads
+- Access all inputs and files through the injected `$this->request` instance.
+- **Input parameters:** Use `$this->request->get($key)`, `$this->request->post($key)`, `$this->request->input($key)`, or `$this->request->getBody()`.
+- **File Uploads:** Never access `$_FILES` directly. Use:
+  - `$this->request->file('field_name')` to retrieve a specific file metadata array.
+  - `$this->request->getFiles()` to get all uploaded files.
+- **Upload Path:** Do not hardcode paths. Retrieve the target directory from application configuration: `Application::$app->config['storage']['uploads']`.
 
 ### Models
 - Create models under `src/Models/` and extend `App\Core\Model`.
