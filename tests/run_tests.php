@@ -531,6 +531,23 @@ $_POST['_method'] = 'PUT';
 assert_equals('hello put 42', $testRouter->resolve(), "Router supports PUT/PATCH/DELETE HTTP form method spoofing");
 unset($_POST['_method']);
 
+// Test Request File Upload helpers
+$_FILES = [
+    'document' => [
+        'name' => 'test.pdf',
+        'type' => 'application/pdf',
+        'tmp_name' => '/tmp/phpabc123',
+        'error' => 0,
+        'size' => 12345
+    ]
+];
+$fileRequest = new \App\Core\Request();
+assert_equals('test.pdf', $fileRequest->file('document')['name'] ?? null, "Request::file() returns metadata of uploaded file by field name");
+assert_true(is_array($fileRequest->getFiles()), "Request::getFiles() returns the entire files array");
+assert_equals(null, $fileRequest->file('non_existent'), "Request::file() returns null for non-existent upload field");
+$_FILES = []; // clean up
+
+
 
 // Test Security Headers Middleware
 $middleware = new \App\Middlewares\SecurityHeadersMiddleware("default-src 'none'");

@@ -70,4 +70,7 @@ return [
         'default_limit'  => (int) ($_ENV['RATE_LIMIT_DEFAULT'] ?? 60),
         'default_window' => (int) ($_ENV['RATE_LIMIT_WINDOW'] ?? 60),
     ],
+    'storage' => [
+        'uploads' => $_ENV['UPLOAD_PATH'] ?? dirname(__DIR__) . '/public/uploads',
+    ],
 ];

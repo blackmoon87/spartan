@@ -148,4 +148,21 @@ class Request
             ?? $_SERVER['REMOTE_ADDR'] 
             ?? '127.0.0.1';
     }
+
+    /**
+     * Retrieve uploaded file metadata from $_FILES.
+     * Returns the file array or null if it doesn't exist.
+     */
+    public function file(string $key): ?array
+    {
+        return $_FILES[$key] ?? null;
+    }
+
+    /**
+     * Get all uploaded files.
+     */
+    public function getFiles(): array
+    {
+        return $_FILES;
+    }
 }
