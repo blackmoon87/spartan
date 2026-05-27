@@ -28,6 +28,9 @@ class Container
     /** @var array<string, mixed> Resolved singleton instances */
     private array $instances = [];
 
+    /** @var array<string, array|null> Cached constructor parameter metadata */
+    private array $resolvedConstructorParams = [];
+
     // ─── Registration ──────────────────────────────────────────────────────────
 
     /**
@@ -106,6 +109,28 @@ class Container
      */
     private function autoResolve(string $abstract): mixed
     {
+        if (array_key_exists($abstract, $this->resolvedConstructorParams)) {
+            $cached = $this->resolvedConstructorParams[$abstract];
+            if ($cached === null) {
+                return new $abstract();
+            }
+            
+            $dependencies = array_map(function (array $paramInfo) use ($abstract) {
+                if ($paramInfo['class'] !== null) {
+                    return $this->make($paramInfo['class']);
+                }
+                if ($paramInfo['hasDefault']) {
+                    return $paramInfo['defaultValue'];
+                }
+                throw new \RuntimeException(
+                    "Container: Cannot resolve parameter [{$paramInfo['name']}] in [{$abstract}]. "
+                    . "Bind it explicitly or provide a default value."
+                );
+            }, $cached['params']);
+            
+            return $cached['reflector']->newInstanceArgs($dependencies);
+        }
+
         if (!class_exists($abstract)) {
             throw new \RuntimeException(
                 "Container: Cannot resolve [{$abstract}]. No binding registered and class does not exist."
@@ -122,27 +147,44 @@ class Container
 
         $constructor = $reflector->getConstructor();
 
-        // No constructor — just instantiate directly
         if ($constructor === null) {
+            $this->resolvedConstructorParams[$abstract] = null;
             return new $abstract();
         }
 
-        $dependencies = array_map(function (\ReflectionParameter $param) use ($abstract) {
+        $paramsMetadata = [];
+        $dependencies = [];
+
+        foreach ($constructor->getParameters() as $param) {
             $type = $param->getType();
+            $paramInfo = [
+                'name' => $param->getName(),
+                'class' => null,
+                'hasDefault' => false,
+                'defaultValue' => null
+            ];
 
             if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
-                return $this->make($type->getName());
+                $paramInfo['class'] = $type->getName();
+                $dependencies[] = $this->make($type->getName());
+            } elseif ($param->isDefaultValueAvailable()) {
+                $paramInfo['hasDefault'] = true;
+                $paramInfo['defaultValue'] = $param->getDefaultValue();
+                $dependencies[] = $param->getDefaultValue();
+            } else {
+                throw new \RuntimeException(
+                    "Container: Cannot resolve parameter [{$param->getName()}] in [{$abstract}]. "
+                    . "Bind it explicitly or provide a default value."
+                );
             }
 
-            if ($param->isDefaultValueAvailable()) {
-                return $param->getDefaultValue();
-            }
+            $paramsMetadata[] = $paramInfo;
+        }
 
-            throw new \RuntimeException(
-                "Container: Cannot resolve parameter [{$param->getName()}] in [{$abstract}]. "
-              . "Bind it explicitly or provide a default value."
-            );
-        }, $constructor->getParameters());
+        $this->resolvedConstructorParams[$abstract] = [
+            'reflector' => $reflector,
+            'params' => $paramsMetadata
+        ];
 
         return $reflector->newInstanceArgs($dependencies);
     }
