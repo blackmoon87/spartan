@@ -552,6 +552,42 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
   }
   ```
 
+- **Role-Based Access Control (RBAC) & Policies**:
+  - **Rule**: Secure endpoints and resources by enforcing roles, permissions, and entity-specific policies.
+  - **Attributes**: Annotate controllers or actions using attributes `App\Core\Attributes\RequireRole` and `App\Core\Attributes\RequirePermission`.
+    ```php
+    use App\Core\Attributes\RequireRole;
+    use App\Core\Attributes\RequirePermission;
+
+    #[RequireRole('admin', 'editor')] // Enforces roles on all actions
+    class PostController extends Controller {
+        #[RequirePermission('publish_post')] // Enforces specific permission
+        public function publish() {}
+    }
+    ```
+  - **User Traits**: The authenticated user model (`App\Models\User`) uses `App\Core\Traits\HasAuthorization` which defines relationship checks like `$user->hasRole('slug')`, `$user->hasPermission('slug')`, and `$user->assignRole('slug')`.
+  - **Gate & Policies**: Register custom ability checks or resource policy bindings:
+    ```php
+    use App\Core\Gate;
+
+    Gate::define('edit-settings', fn($user) => $user->hasRole('admin'));
+    Gate::policy(Post::class, PostPolicy::class);
+
+    // Perform checks
+    if (Gate::allows('update', $post)) { ... }
+    if (Gate::denies('update', $post)) { ... }
+    ```
+  - **Blade Template Directives**: In Blade views, conditionally render content using `@can`, `@cannot`, and `@role` directives:
+    ```html
+    @can('update', $post)
+        <a href="/post/{{ $post->id }}/edit">Edit</a>
+    @endcan
+
+    @role('admin')
+        <button>Delete</button>
+    @endrole
+    ```
+
 ---
 
 ## 4. Workflow to Add a New Feature
