@@ -62,11 +62,8 @@ class View
         }
 
         $params = array_merge($this->shared, $params);
-        if (!isset($params['authUser'])) {
-            $user = Gate::resolveUser();
-            if ($user) {
-                $params['authUser'] = $user;
-            }
+        if (!array_key_exists('authUser', $params)) {
+            $params['authUser'] = Gate::resolveUser();
         }
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
@@ -111,11 +108,8 @@ class View
         }
 
         $params = array_merge($this->shared, $params);
-        if (!isset($params['authUser'])) {
-            $user = Gate::resolveUser();
-            if ($user) {
-                $params['authUser'] = $user;
-            }
+        if (!array_key_exists('authUser', $params)) {
+            $params['authUser'] = Gate::resolveUser();
         }
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
