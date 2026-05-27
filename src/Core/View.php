@@ -139,6 +139,13 @@ class View
 
         $compiledPath = $cacheDir . '/' . md5($view) . '.php';
 
+        $viewsConfig = isset(Application::$app) ? (Application::$app->config['views'] ?? []) : [];
+        $cacheEnabled = $viewsConfig['cache_enabled'] ?? false;
+
+        if ($cacheEnabled && file_exists($compiledPath)) {
+            return $compiledPath;
+        }
+
         $debugMode = getenv('APP_DEBUG') === 'true' || ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
 
         if (!file_exists($compiledPath) || $debugMode || filemtime($sourcePath) > filemtime($compiledPath)) {

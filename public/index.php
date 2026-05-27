@@ -49,12 +49,21 @@ $config = require_once dirname(__DIR__) . '/config/config.php';
 $app = new Application($config);
 
 // ─── Load Routes ──────────────────────────────────────────────────────────────
-// Split routes by domain for maintainability. Add new route files here as the
-// project grows — each file receives $app in scope automatically.
+// If route cache is enabled and not in debug mode, load from cache.
 $routesPath = dirname(__DIR__) . '/routes';
-require_once $routesPath . '/web.php';
-require_once $routesPath . '/admin.php';
-require_once $routesPath . '/api.php';
+$routeCacheEnabled = $config['router']['cache_enabled'] ?? false;
+
+if ($routeCacheEnabled && !$debugMode && $app->router->loadCache()) {
+    // Loaded from cache
+} else {
+    require_once $routesPath . '/web.php';
+    require_once $routesPath . '/admin.php';
+    require_once $routesPath . '/api.php';
+
+    if ($routeCacheEnabled && !$debugMode) {
+        $app->router->saveCache();
+    }
+}
 
 // Start the Application
 $app->run();

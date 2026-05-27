@@ -1574,6 +1574,72 @@ try {
     $resStdReq = $tempRouter2->resolve();
     assert_equals("Request path: /test-std-request", $resStdReq, "Standard Request auto-injection resolves and passes active request");
 
+    // === Testing View & Route Caching ===
+    test_group("View & Route Caching");
+    
+    // 1. View Caching Test
+    $app->config['views']['cache_enabled'] = true;
+    
+    $testViewName = 'temp_test_cache_view';
+    $viewDir = $app->view->getViewsPath();
+    $testViewFile = $viewDir . '/' . $testViewName . '.blade.php';
+    
+    file_put_contents($testViewFile, 'Initial Content');
+    
+    $resView1 = $app->view->renderViewOnly($testViewName);
+    assert_equals('Initial Content', trim($resView1), "View compiles and renders initial content");
+    
+    file_put_contents($testViewFile, 'Modified Content');
+    
+    $resView2 = $app->view->renderViewOnly($testViewName);
+    assert_equals('Initial Content', trim($resView2), "View caching returns initial compiled content when cache is enabled");
+    
+    $app->config['views']['cache_enabled'] = false;
+    $resView3 = $app->view->renderViewOnly($testViewName);
+    assert_equals('Modified Content', trim($resView3), "View recompiles when cache is disabled");
+    
+    if (file_exists($testViewFile)) {
+        unlink($testViewFile);
+    }
+    $cachedFile = dirname(dirname(__DIR__)) . '/storage/views/' . md5($testViewName) . '.php';
+    if (file_exists($cachedFile)) {
+        unlink($cachedFile);
+    }
+
+    // 2. Route Caching Test
+    $app->config['router']['cache_enabled'] = true;
+    $cacheFile = dirname(dirname(__DIR__)) . '/storage/cache/test_routes.php';
+    $app->config['router']['cache_file'] = $cacheFile;
+    
+    if (file_exists($cacheFile)) {
+        unlink($cacheFile);
+    }
+    
+    $tempRouter3 = new \App\Core\Router($app->request, $app->response);
+    $tempRouter3->get('/cache-test-route', [TestStandardRequestController::class, 'handle']);
+    $tempRouter3->middlewareGroup('cache_group', ['auth']);
+    $tempRouter3->excludeCsrf('/cache-webhook');
+    
+    $saveSuccess = $tempRouter3->saveCache();
+    assert_true($saveSuccess, "Router saves cache file successfully");
+    assert_true(file_exists($cacheFile), "Route cache file exists on disk");
+    
+    $tempRouter4 = new \App\Core\Router($app->request, $app->response);
+    $loadSuccess = $tempRouter4->loadCache();
+    assert_true($loadSuccess, "Router loads cache file successfully");
+    
+    $_SERVER['REQUEST_URI'] = '/cache-test-route';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $app->request = new \App\Core\Request();
+    $tempRouter4->setRequest($app->request);
+    $app->response->reset();
+    $resCacheRoute = $tempRouter4->resolve();
+    assert_equals("Request path: /cache-test-route", $resCacheRoute, "Cached route resolves correctly");
+    
+    if (file_exists($cacheFile)) {
+        unlink($cacheFile);
+    }
+
 } catch (\Throwable $e) {
     assert_true(false, "Logger, Dialect or FormRequest test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }

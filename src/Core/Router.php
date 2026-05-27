@@ -292,4 +292,63 @@ class Router
 
         throw new \RuntimeException("Invalid route callback type.");
     }
+
+    /**
+     * Load cached routes if enabled and file exists.
+     */
+    public function loadCache(): bool
+    {
+        $config = Application::$app->config['router'] ?? [];
+        $enabled = $config['cache_enabled'] ?? false;
+        $file = $config['cache_file'] ?? null;
+
+        if ($enabled && $file && file_exists($file)) {
+            $data = require $file;
+            if (is_array($data)) {
+                $this->routes = $data['routes'] ?? [];
+                $this->middlewareGroups = $data['middlewareGroups'] ?? [];
+                $this->csrfExclusions = $data['csrfExclusions'] ?? [];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Save current routes map to cache file.
+     */
+    public function saveCache(): bool
+    {
+        $config = Application::$app->config['router'] ?? [];
+        $enabled = $config['cache_enabled'] ?? false;
+        $file = $config['cache_file'] ?? null;
+
+        if (!$enabled || !$file) {
+            return false;
+        }
+
+        // We must check if any route callback is a Closure (since Closures cannot be exported)
+        foreach ($this->routes as $method => $routes) {
+            foreach ($routes as $path => $data) {
+                if ($data['callback'] instanceof \Closure) {
+                    throw new \LogicException("Cannot cache routes because route '{$method} {$path}' uses a Closure.");
+                }
+            }
+        }
+
+        $dir = dirname($file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $data = [
+            'routes' => $this->routes,
+            'middlewareGroups' => $this->middlewareGroups,
+            'csrfExclusions' => $this->csrfExclusions,
+        ];
+
+        $content = "<?php\n\n// Auto-generated route cache file\nreturn " . var_export($data, true) . ";\n";
+        file_put_contents($file, $content);
+        return true;
+    }
 }

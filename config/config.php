@@ -73,4 +73,11 @@ return [
     'storage' => [
         'uploads' => $_ENV['UPLOAD_PATH'] ?? dirname(__DIR__) . '/public/uploads',
     ],
+    'views' => [
+        'cache_enabled' => ($_ENV['VIEW_CACHE_ENABLED'] ?? 'false') === 'true',
+    ],
+    'router' => [
+        'cache_enabled' => ($_ENV['ROUTE_CACHE_ENABLED'] ?? 'false') === 'true',
+        'cache_file'    => $_ENV['ROUTE_CACHE_FILE'] ?? dirname(__DIR__) . '/storage/cache/routes.php',
+    ],
 ];
