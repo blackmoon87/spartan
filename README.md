@@ -39,7 +39,7 @@ A hand-crafted PHP 8.1+ MVC framework built for developers who want to understan
 ### 1. Clone
 
 ```bash
-git clone https://github.com/your-username/spartan.git
+git clone https://github.com/blackmoon87/spartan.git
 cd spartan
 ```
 
