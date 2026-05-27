@@ -1253,7 +1253,136 @@ try {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. CLEANUP & SUMMARY
+// 13. TEST: Rate Limiting, Parameterized Middlewares, and Early Abort
+// ─────────────────────────────────────────────────────────────────────────────
+test_group("Rate Limiter & Parameterized Middlewares");
+
+// A. Test Early Abort in Router
+try {
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    
+    class AbortDummyMiddleware extends \App\Core\Middleware {
+        public function execute(\App\Core\Request $request, \App\Core\Response $response): void {
+            $response->redirect('/login');
+        }
+    }
+    
+    $tempRouter->aliasMiddleware('abort_middleware', AbortDummyMiddleware::class);
+    
+    $callbackExecuted = false;
+    $tempRouter->get('/profile-dashboard', function() use (&$callbackExecuted) {
+        $callbackExecuted = true;
+        return 'profile-ok';
+    }, ['abort_middleware']);
+    
+    $req = new class extends \App\Core\Request {
+        public function getPath(): string { return '/profile-dashboard'; }
+        public function getMethod(): string { return 'GET'; }
+    };
+    $tempRouter->setRequest($req);
+    $app->response->reset();
+    
+    $res = $tempRouter->resolve();
+    assert_true($res instanceof \App\Core\Response, "Early abort returns the response object");
+    assert_equals('/login', $res->getRedirectUrl(), "Early abort correctly sets the redirect URL");
+    assert_true(!$callbackExecuted, "Early abort prevents controller callback from executing");
+    
+} catch (\Throwable $e) {
+    assert_true(false, "Early abort test failed: " . $e->getMessage());
+}
+
+// B. Test Parameterized Middlewares
+try {
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    
+    class ParamDummyMiddleware extends \App\Core\Middleware {
+        public static ?string $p1 = null;
+        public static ?string $p2 = null;
+        
+        public function __construct(string $p1 = '', string $p2 = '') {
+            self::$p1 = $p1;
+            self::$p2 = $p2;
+        }
+        
+        public function execute(\App\Core\Request $request, \App\Core\Response $response): void {}
+    }
+    
+    $tempRouter->aliasMiddleware('param_dummy', ParamDummyMiddleware::class);
+    $tempRouter->get('/api/users', function() { return 'ok'; }, ['param_dummy:val1,val2']);
+    
+    $req = new class extends \App\Core\Request {
+        public function getPath(): string { return '/api/users'; }
+        public function getMethod(): string { return 'GET'; }
+    };
+    $tempRouter->setRequest($req);
+    $app->response->reset();
+    
+    $tempRouter->resolve();
+    assert_equals('val1', ParamDummyMiddleware::$p1, "Parameterized middleware constructor receives first argument");
+    assert_equals('val2', ParamDummyMiddleware::$p2, "Parameterized middleware constructor receives second argument");
+    
+} catch (\Throwable $e) {
+    assert_true(false, "Parameterized middleware test failed: " . $e->getMessage());
+}
+
+// C. Test Rate Limiter Middleware
+try {
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    $tempRouter->get('/api/rate-limited', function() { return 'rate-ok'; }, ['rate_limit:3,5']);
+    
+    $req = new class extends \App\Core\Request {
+        public function getPath(): string { return '/api/rate-limited'; }
+        public function getMethod(): string { return 'GET'; }
+        public function getIp(): string { return '192.168.1.100'; }
+    };
+    
+    // Clear any existing cache for this key
+    $cacheKey = 'rate_limit:' . md5('192.168.1.100:/api/rate-limited');
+    \App\Core\Cache::forget($cacheKey);
+    
+    // Request 1: hits = 1
+    $tempRouter->setRequest($req);
+    $app->response->reset();
+    $res1 = $tempRouter->resolve();
+    $headers1 = $app->response->getHeaders();
+    assert_equals('3', $headers1['X-RateLimit-Limit'] ?? '', "Rate limit first request sets correct Limit header");
+    assert_equals('2', $headers1['X-RateLimit-Remaining'] ?? '', "Rate limit first request sets remaining count to 2");
+    assert_equals('rate-ok', $res1, "Rate limit first request executes route callback successfully");
+    
+    // Request 2: hits = 2
+    $app->response->reset();
+    $res2 = $tempRouter->resolve();
+    $headers2 = $app->response->getHeaders();
+    assert_equals('1', $headers2['X-RateLimit-Remaining'] ?? '', "Rate limit second request sets remaining count to 1");
+    
+    // Request 3: hits = 3
+    $app->response->reset();
+    $res3 = $tempRouter->resolve();
+    $headers3 = $app->response->getHeaders();
+    assert_equals('0', $headers3['X-RateLimit-Remaining'] ?? '', "Rate limit third request sets remaining count to 0");
+    
+    // Request 4: hits = 4 (Blocked!)
+    $app->response->reset();
+    $res4 = $tempRouter->resolve();
+    $headers4 = $app->response->getHeaders();
+    assert_equals(429, $app->response->getStatusCode(), "Rate limit fourth request returns 429 Too Many Requests status code");
+    assert_true(str_contains($app->response->getContent(), 'Too Many Requests'), "Rate limit fourth request outputs rate limit error content");
+    assert_true(isset($headers4['Retry-After']), "Rate limit blocked response sets Retry-After header");
+    assert_true($res4 instanceof \App\Core\Response, "Rate limit blocked request returns response object early");
+    
+    // Simulating Window decay/reset by clearing cache
+    \App\Core\Cache::forget($cacheKey);
+    $app->response->reset();
+    $res5 = $tempRouter->resolve();
+    assert_equals('rate-ok', $res5, "Rate limit resets successfully after cache expiration/decay window");
+
+} catch (\Throwable $e) {
+    assert_true(false, "Rate Limiter test failed: " . $e->getMessage());
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. CLEANUP & SUMMARY
 // ─────────────────────────────────────────────────────────────────────────────
 test_group("Tear Down");
 try {

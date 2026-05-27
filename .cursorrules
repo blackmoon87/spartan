@@ -472,6 +472,20 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
 - **`maxAttempts`** minimum is 1. Setting it to 1 with `onFailure: 'retry'` is equivalent to `onFailure: 'stop'`.
 - **Callable listeners are always sync** — async requires a class name string.
 
+### Middleware & Rate Limiting
+- **Rule**: Middlewares inspect and filter incoming HTTP requests. They can abort request resolution early (e.g. on redirects, authorization failure, or rate limiting) to bypass executing controller callbacks.
+- **Alias Mapping**: Register aliases in the Router constructor or dynamically via `$router->aliasMiddleware('name', MiddlewareClass::class)`.
+- **Parameterized Middlewares**: Specify parameters after a colon: e.g. `'rate_limit:60,60'`. Parameters are passed directly to the constructor of the middleware.
+- **Rate Limit Middleware (`rate_limit:limit,window`)**:
+  - Automatically mapped to `App\Middlewares\RateLimitMiddleware`.
+  - Tracks requests per client IP (`Request::getIp()`) and route path.
+  - Returns `429 Too Many Requests` when limit is exceeded and sets headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After`.
+  - Uses the Cache layer (`Cache::get` and `Cache::put`).
+  ```php
+  // Register in routes/web.php or routes/api.php
+  $router->get('/api/resource', [ApiController::class, 'index'], ['rate_limit:100,60']);
+  ```
+
 ### Global Exception Handler
 - **Rule**: All application errors and exceptions are routed through the global `App\Core\ExceptionHandler` to prevent raw server leakage.
 - **Customization**: To swap or customize how errors are rendered (e.g. returning JSON for API routes vs error page templates), bind your custom class in the container:

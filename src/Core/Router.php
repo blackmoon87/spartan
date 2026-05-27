@@ -11,11 +11,25 @@ class Router
     protected array $routes = [];
     protected array $middlewareGroups = [];
     protected array $csrfExclusions = [];
+    protected array $middlewareAliases = [];
 
     public function __construct(Request $request, Response $response)
     {
         $this->request = $request;
         $this->response = $response;
+        
+        $this->middlewareAliases = [
+            'auth' => \App\Middlewares\AuthMiddleware::class,
+            'rate_limit' => \App\Middlewares\RateLimitMiddleware::class,
+        ];
+    }
+
+    /**
+     * Define a middleware alias.
+     */
+    public function aliasMiddleware(string $name, string $class): void
+    {
+        $this->middlewareAliases[$name] = $class;
     }
 
     /**
@@ -102,6 +116,7 @@ class Router
      */
     public function resolve(): mixed
     {
+        $this->response->reset();
         $path   = $this->request->getPath();
         $method = $this->request->getMethod();
 
@@ -160,10 +175,18 @@ class Router
 
         // 2. Execute Middlewares
         $resolvedMiddlewares = $this->resolveMiddlewares($routeData['middlewares']);
-        foreach ($resolvedMiddlewares as $middlewareClass) {
+        foreach ($resolvedMiddlewares as $middlewareInfo) {
+            $middlewareClass = $middlewareInfo['class'];
+            $args = $middlewareInfo['args'];
+
             /** @var Middleware $middleware */
-            $middleware = new $middlewareClass();
+            $middleware = new $middlewareClass(...$args);
             $middleware->execute($this->request, $this->response);
+
+            // Abort resolution if response is marked to terminate (redirect, content set, or error status code)
+            if ($this->response->getRedirectUrl() !== null || $this->response->getContent() !== null || $this->response->getStatusCode() >= 400) {
+                return $this->response;
+            }
         }
 
         // 3. Execute Callback
@@ -177,10 +200,35 @@ class Router
     {
         $resolved = [];
         foreach ($middlewares as $middleware) {
-            if (is_string($middleware) && isset($this->middlewareGroups[$middleware])) {
-                $resolved = array_merge($resolved, $this->resolveMiddlewares($this->middlewareGroups[$middleware]));
-            } else {
+            if (is_string($middleware)) {
+                $parts = explode(':', $middleware, 2);
+                $name = $parts[0];
+                $argsString = $parts[1] ?? '';
+                // Cast string arguments to proper PHP types if numeric
+                $args = $argsString !== '' ? array_map(function ($arg) {
+                    if (is_numeric($arg)) {
+                        return str_contains($arg, '.') ? (float) $arg : (int) $arg;
+                    }
+                    return $arg;
+                }, explode(',', $argsString)) : [];
+
+                if (isset($this->middlewareGroups[$name])) {
+                    $resolved = array_merge($resolved, $this->resolveMiddlewares($this->middlewareGroups[$name]));
+                } else {
+                    $class = $this->middlewareAliases[$name] ?? $name;
+                    $resolved[] = [
+                        'class' => $class,
+                        'args' => $args
+                    ];
+                }
+            } elseif (is_array($middleware) && isset($middleware['class'])) {
                 $resolved[] = $middleware;
+            } else {
+                $class = is_object($middleware) ? get_class($middleware) : (string)$middleware;
+                $resolved[] = [
+                    'class' => $class,
+                    'args' => []
+                ];
             }
         }
         return $resolved;

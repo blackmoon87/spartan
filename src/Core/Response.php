@@ -46,9 +46,17 @@ class Response
     /**
      * Get the response content.
      */
-    public function getContent(): ?string
+     public function getContent(): ?string
+     {
+         return $this->content;
+     }
+
+    /**
+     * Set the response content.
+     */
+    public function setContent(string $content): void
     {
-        return $this->content;
+        $this->content = $content;
     }
 
     /**

@@ -137,4 +137,15 @@ class Request
         return isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
                strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
     }
+
+    /**
+     * Get the client's IP address.
+     */
+    public function getIp(): string
+    {
+        return $_SERVER['HTTP_CLIENT_IP'] 
+            ?? $_SERVER['HTTP_X_FORWARDED_FOR'] 
+            ?? $_SERVER['REMOTE_ADDR'] 
+            ?? '127.0.0.1';
+    }
 }
