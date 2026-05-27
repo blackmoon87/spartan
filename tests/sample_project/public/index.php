@@ -82,6 +82,39 @@ if ($app->db !== null) {
                 updated_at TEXT NULL,
                 FOREIGN KEY(user_id) REFERENCES test_users(id)
             );");
+
+            // Dental clinic tables (SQLite)
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_patients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                medical_history TEXT NULL,
+                created_at TEXT NULL,
+                updated_at TEXT NULL
+            );");
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_appointments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                appointment_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                treatment_notes TEXT NULL,
+                created_at TEXT NULL,
+                updated_at TEXT NULL,
+                FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE
+            );");
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                appointment_id INTEGER NOT NULL,
+                total_amount REAL NOT NULL,
+                paid_amount REAL NOT NULL DEFAULT 0.0,
+                status TEXT NOT NULL DEFAULT 'unpaid',
+                created_at TEXT NULL,
+                updated_at TEXT NULL,
+                FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE,
+                FOREIGN KEY(appointment_id) REFERENCES clinic_appointments(id) ON DELETE CASCADE
+            );");
         } else {
             // MySQL
             $app->db->exec("CREATE TABLE IF NOT EXISTS `test_users` (
@@ -98,6 +131,40 @@ if ($app->db !== null) {
                 `total` DECIMAL(10,2) NOT NULL,
                 `created_at` DATETIME NULL,
                 `updated_at` DATETIME NULL
+                -- FOREIGN KEY(user_id) REFERENCES test_users(id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+            // Dental clinic tables (MySQL)
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_patients (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                phone VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                medical_history TEXT NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_appointments (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                patient_id INT UNSIGNED NOT NULL,
+                appointment_date DATETIME NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+                treatment_notes TEXT NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            $app->db->exec("CREATE TABLE IF NOT EXISTS clinic_invoices (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                patient_id INT UNSIGNED NOT NULL,
+                appointment_id INT UNSIGNED NOT NULL,
+                total_amount DECIMAL(10,2) NOT NULL,
+                paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                status VARCHAR(50) NOT NULL DEFAULT 'unpaid',
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL,
+                FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE,
+                FOREIGN KEY(appointment_id) REFERENCES clinic_appointments(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
         }
         

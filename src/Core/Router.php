@@ -9,11 +9,37 @@ class Router
     protected Request $request;
     protected Response $response;
     protected array $routes = [];
+    protected array $middlewareGroups = [];
+    protected array $csrfExclusions = [];
 
     public function __construct(Request $request, Response $response)
     {
         $this->request = $request;
         $this->response = $response;
+    }
+
+    /**
+     * Dynamically swap requests.
+     */
+    public function setRequest(Request $request): void
+    {
+        $this->request = $request;
+    }
+
+    /**
+     * Define a middleware group.
+     */
+    public function middlewareGroup(string $name, array $middlewares): void
+    {
+        $this->middlewareGroups[$name] = $middlewares;
+    }
+
+    /**
+     * Define CSRF exclusions.
+     */
+    public function excludeCsrf(string ...$paths): void
+    {
+        $this->csrfExclusions = array_merge($this->csrfExclusions, $paths);
     }
 
     /**
@@ -114,16 +140,27 @@ class Router
         }
 
         // 1. Central CSRF Protection check for all state-changing POST requests
-        if ($method === 'POST' && !$this->request->validateCsrf()) {
+        $isExcluded = false;
+        foreach ($this->csrfExclusions as $excludedPath) {
+            $pattern = str_replace('\*', '.*', preg_quote($excludedPath, '#'));
+            if (preg_match('#^' . $pattern . '$#', $path)) {
+                $isExcluded = true;
+                break;
+            }
+        }
+
+        if ($method === 'POST' && !$isExcluded && !$this->request->validateCsrf()) {
             $this->response->setStatusCode(403);
             if ($this->request->isAjax()) {
                 $this->response->json(['error' => 'Invalid or expired CSRF token.'], 403);
+                return $this->response;
             }
             throw new \RuntimeException("CSRF token validation failed.");
         }
 
         // 2. Execute Middlewares
-        foreach ($routeData['middlewares'] as $middlewareClass) {
+        $resolvedMiddlewares = $this->resolveMiddlewares($routeData['middlewares']);
+        foreach ($resolvedMiddlewares as $middlewareClass) {
             /** @var Middleware $middleware */
             $middleware = new $middlewareClass();
             $middleware->execute($this->request, $this->response);
@@ -131,6 +168,22 @@ class Router
 
         // 3. Execute Callback
         return $this->executeCallback($routeData['callback'], $params);
+    }
+
+    /**
+     * Helper to resolve middleware groups and class names to a flat array.
+     */
+    protected function resolveMiddlewares(array $middlewares): array
+    {
+        $resolved = [];
+        foreach ($middlewares as $middleware) {
+            if (is_string($middleware) && isset($this->middlewareGroups[$middleware])) {
+                $resolved = array_merge($resolved, $this->resolveMiddlewares($this->middlewareGroups[$middleware]));
+            } else {
+                $resolved[] = $middleware;
+            }
+        }
+        return $resolved;
     }
 
     /**
@@ -150,7 +203,7 @@ class Router
                 throw new \InvalidArgumentException("Controller class [{$controllerClass}] does not exist.");
             }
             
-            $controller = new $controllerClass();
+            $controller = Application::$app->container->make($controllerClass);
             if (!method_exists($controller, $action)) {
                 throw new \BadMethodCallException("Method [{$action}] does not exist on controller [{$controllerClass}].");
             }

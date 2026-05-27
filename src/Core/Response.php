@@ -6,12 +6,57 @@ namespace App\Core;
 
 class Response
 {
+    protected int $statusCode = 200;
+    protected array $headers = [];
+    protected ?string $content = null;
+    protected ?string $redirectUrl = null;
+
     /**
      * Set the HTTP response status code.
      */
     public function setStatusCode(int $code): void
     {
-        http_response_code($code);
+        $this->statusCode = $code;
+    }
+
+    /**
+     * Get the current HTTP response status code.
+     */
+    public function getStatusCode(): int
+    {
+        return $this->statusCode;
+    }
+
+    /**
+     * Set a custom header.
+     */
+    public function setHeader(string $name, string $value): void
+    {
+        $this->headers[$name] = $value;
+    }
+
+    /**
+     * Get all custom headers.
+     */
+    public function getHeaders(): array
+    {
+        return $this->headers;
+    }
+
+    /**
+     * Get the response content.
+     */
+    public function getContent(): ?string
+    {
+        return $this->content;
+    }
+
+    /**
+     * Get the redirect URL.
+     */
+    public function getRedirectUrl(): ?string
+    {
+        return $this->redirectUrl;
     }
 
     /**
@@ -30,8 +75,8 @@ class Response
             }
         }
 
-        header('Location: ' . $url);
-        exit;
+        $this->redirectUrl = $url;
+        $this->setHeader('Location', $url);
     }
 
     /**
@@ -40,8 +85,35 @@ class Response
     public function json(mixed $data, int $statusCode = 200): void
     {
         $this->setStatusCode($statusCode);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($data);
-        exit;
+        $this->setHeader('Content-Type', 'application/json; charset=utf-8');
+        $this->content = json_encode($data);
+    }
+
+    /**
+     * Send the status code, headers, and body.
+     */
+    public function send(): void
+    {
+        if (!headers_sent()) {
+            http_response_code($this->statusCode);
+            foreach ($this->headers as $name => $value) {
+                header($name . ': ' . $value);
+            }
+        }
+
+        if ($this->content !== null) {
+            echo $this->content;
+        }
+    }
+
+    /**
+     * Reset response properties (useful for testing).
+     */
+    public function reset(): void
+    {
+        $this->statusCode = 200;
+        $this->headers = [];
+        $this->content = null;
+        $this->redirectUrl = null;
     }
 }

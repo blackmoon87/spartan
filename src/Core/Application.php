@@ -57,22 +57,26 @@ class Application
         }
     }
 
-    /**
-     * Start the routing system and output the response content.
-     */
     public function run(): void
     {
         try {
-            echo $this->router->resolve();
-        } catch (\Exception $e) {
-            $this->response->setStatusCode(500);
-            if ($this->config['app']['debug'] ?? false) {
-                echo "<h1>500 Internal Server Error</h1>";
-                echo "<p>" . htmlspecialchars($e->getMessage()) . "</p>";
-                echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+            $result = $this->router->resolve();
+            if ($result instanceof Response) {
+                $result->send();
             } else {
-                echo "<h1>500 Internal Server Error</h1>";
+                if ($result !== null && $result !== '') {
+                    $this->response->send();
+                    echo $result;
+                } else {
+                    $this->response->send();
+                }
             }
+        } catch (\Throwable $e) {
+            $handler = $this->container->has(ExceptionHandler::class)
+                ? $this->container->make(ExceptionHandler::class)
+                : new ExceptionHandler();
+                
+            $handler->handle($e, $this->request, $this->response, $this->config);
         } finally {
             // Automatically clean flash messages at the end of execution
             $this->session->removeFlashMessages();

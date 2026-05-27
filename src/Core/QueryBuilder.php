@@ -85,29 +85,47 @@ class QueryBuilder
 
     /**
      * Add an INNER JOIN clause.
-     * join('users', 'orders.user_id', 'users.id')
+     * Supports both join('table', 'col1', 'col2') and join('table', 'col1', '=', 'col2').
      */
-    public function join(string $table, string $first, string $second): static
+    public function join(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
     {
-        $this->joins[] = ['type' => 'INNER', 'table' => $table, 'first' => $first, 'second' => $second];
+        if ($second === null) {
+            $second = $operatorOrSecond;
+            $operator = '=';
+        } else {
+            $operator = $operatorOrSecond;
+        }
+        $this->joins[] = ['type' => 'INNER', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
         return $this;
     }
 
     /**
      * Add a LEFT JOIN clause.
      */
-    public function leftJoin(string $table, string $first, string $second): static
+    public function leftJoin(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
     {
-        $this->joins[] = ['type' => 'LEFT', 'table' => $table, 'first' => $first, 'second' => $second];
+        if ($second === null) {
+            $second = $operatorOrSecond;
+            $operator = '=';
+        } else {
+            $operator = $operatorOrSecond;
+        }
+        $this->joins[] = ['type' => 'LEFT', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
         return $this;
     }
 
     /**
      * Add a RIGHT JOIN clause.
      */
-    public function rightJoin(string $table, string $first, string $second): static
+    public function rightJoin(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
     {
-        $this->joins[] = ['type' => 'RIGHT', 'table' => $table, 'first' => $first, 'second' => $second];
+        if ($second === null) {
+            $second = $operatorOrSecond;
+            $operator = '=';
+        } else {
+            $operator = $operatorOrSecond;
+        }
+        $this->joins[] = ['type' => 'RIGHT', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
         return $this;
     }
 
@@ -383,7 +401,8 @@ class QueryBuilder
 
         // Append JOIN clauses
         foreach ($this->joins as $join) {
-            $sql .= " {$join['type']} JOIN `{$join['table']}` ON {$join['first']} = {$join['second']}";
+            $operator = $join['operator'] ?? '=';
+            $sql .= " {$join['type']} JOIN `{$join['table']}` ON {$join['first']} {$operator} {$join['second']}";
         }
 
         $sql .= $whereSQL;

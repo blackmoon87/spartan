@@ -156,15 +156,22 @@ $count = $this->table()->where('id', $id)->delete();
 // Cross-table (advanced)
 $orders = $this->table('orders')->where('user_id', $userId)->get();
 
-// JOIN — for multi-table queries
+// JOIN — for multi-table queries (supports both 3-arg legacy and 4-arg with operator)
 $this->table('orders')
-     ->join('users',    'orders.user_id',   'users.id')     // INNER JOIN
-     ->leftJoin('coupons', 'orders.coupon_id', 'coupons.id') // LEFT JOIN
+     ->join('users',    'orders.user_id',   'users.id')         // 3-argument (operator defaults to '=')
+     ->leftJoin('coupons', 'orders.coupon_id', '=', 'coupons.id') // 4-argument (with custom operator)
      ->select('orders.id', 'users.name', 'coupons.code')
      ->where('orders.status', 'paid')
      ->get();
 ```
 - Database transactions: `$this->beginTransaction()`, `$this->commit()`, `$this->rollBack()`.
+- Or use the transactional wrapper which auto-commits/rolls back on failure:
+  ```php
+  $this->transaction(function ($model) {
+      $model->table('orders')->insert([...]);
+      $model->table('invoices')->insert([...]);
+  });
+  ```
 
 > **Safety rules for write operations:**
 > - `delete()` — **requires** at least one `where()` condition. Throws `LogicException` if called without one.
@@ -198,6 +205,13 @@ $this->table('orders')
   </form>
   ```
   The Router detects `_method` on POST requests and routes to the correct handler. CSRF is still enforced (real transport is POST).
+- **CSRF Exclusions**: To exclude specific stateless routes (like payment webhooks or API endpoints) from central CSRF checks, register them in route files using `$app->router->excludeCsrf()`:
+  ```php
+  $app->router->excludeCsrf(
+      '/api/stripe/webhook',
+      '/api/v1/*'
+  );
+  ```
 
 ### Middlewares
 - Create middlewares under `src/Middlewares/` extending `App\Core\Middleware`.
@@ -218,6 +232,20 @@ $this->table('orders')
     new SecurityHeadersMiddleware("default-src 'self'; font-src https://fonts.gstatic.com")
     ```
 - See `src/Middlewares/AuthMiddleware.php` as a working example.
+- **Middleware Groups**: Register custom middleware groups globally to avoid repetitive declarations on individual routes:
+  ```php
+  $app->router->middlewareGroup('web', [
+      SecurityHeadersMiddleware::class,
+  ]);
+  
+  $app->router->middlewareGroup('admin_auth', [
+      SecurityHeadersMiddleware::class,
+      AuthMiddleware::class,
+  ]);
+
+  // Use the group name in route declarations:
+  $app->router->get('/dashboard', [DashboardController::class, 'index'], ['admin_auth']);
+  ```
 
 ### Request & Response
 - Retrieve request parameters using the typed properties injected in the base Controller:
@@ -274,6 +302,19 @@ $this->table('orders')
 - Resolve inside a Controller using the shortcut: `$mailer = $this->make(MailService::class);`
 - Services live in `src/Services/` and must NOT extend Model or Controller.
 - Use Container for any class that has external dependencies or must be swappable in tests.
+- **Controller Dependency Injection (DI)**: Controllers resolved by the router automatically resolve constructor parameters using reflection and container bindings. If a controller constructor has dependencies, type-hint them and the container will automatically instantiate/resolve them:
+  ```php
+  namespace App\Controllers;
+
+  use App\Services\PaymentService;
+
+  class OrderController extends Controller {
+      public function __construct(private PaymentService $payment) {
+          parent::__construct();
+      }
+  }
+  ```
+  If a controller has no constructor, it instantiates instantly (`new $controller()`) with zero reflection overhead, ensuring peak execution speed.
 
 ### Cache
 - **Rule**: Never query the database for data that rarely changes. Use `Cache::remember()` instead.
@@ -430,6 +471,15 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
 - **Fallback guarantee**: If the DB is unavailable when dispatching, async listeners fall back to sync execution automatically (logged to error_log). The request never silently drops events.
 - **`maxAttempts`** minimum is 1. Setting it to 1 with `onFailure: 'retry'` is equivalent to `onFailure: 'stop'`.
 - **Callable listeners are always sync** — async requires a class name string.
+
+### Global Exception Handler
+- **Rule**: All application errors and exceptions are routed through the global `App\Core\ExceptionHandler` to prevent raw server leakage.
+- **Customization**: To swap or customize how errors are rendered (e.g. returning JSON for API routes vs error page templates), bind your custom class in the container:
+  ```php
+  use App\Core\ExceptionHandler;
+  
+  Application::$app->container->singleton(ExceptionHandler::class, fn() => new MyCustomExceptionHandler());
+  ```
 
 ---
 

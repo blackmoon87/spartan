@@ -146,6 +146,25 @@ abstract class Model
         return $this->db ? $this->db->rollBack() : false;
     }
 
+    /**
+     * Run a callback within a database transaction.
+     * Automatically commits on success and rolls back on exception.
+     *
+     * @throws \Throwable
+     */
+    public function transaction(callable $callback): mixed
+    {
+        $this->beginTransaction();
+        try {
+            $result = $callback($this);
+            $this->commit();
+            return $result;
+        } catch (\Throwable $e) {
+            $this->rollBack();
+            throw $e;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Relationships
     // ─────────────────────────────────────────────────────────────────────────

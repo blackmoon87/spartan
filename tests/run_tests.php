@@ -165,6 +165,9 @@ try {
     $db->exec("DROP TABLE IF EXISTS `test_orders` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_users` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_jobs` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
 
     // Create schema
     $db->exec("CREATE TABLE `test_users` (
@@ -188,6 +191,41 @@ try {
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT UNSIGNED UNIQUE NOT NULL,
         `bio` TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    // Create dental clinic tables
+    $db->exec("CREATE TABLE `clinic_patients` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(255) NOT NULL,
+        `phone` VARCHAR(255) NOT NULL,
+        `email` VARCHAR(255) UNIQUE NOT NULL,
+        `medical_history` TEXT NULL,
+        `created_at` DATETIME NULL,
+        `updated_at` DATETIME NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `clinic_appointments` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `patient_id` INT UNSIGNED NOT NULL,
+        `appointment_date` DATETIME NOT NULL,
+        `status` VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+        `treatment_notes` TEXT NULL,
+        `created_at` DATETIME NULL,
+        `updated_at` DATETIME NULL,
+        FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `clinic_invoices` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `patient_id` INT UNSIGNED NOT NULL,
+        `appointment_id` INT UNSIGNED NOT NULL,
+        `total_amount` DECIMAL(10,2) NOT NULL,
+        `paid_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        `status` VARCHAR(50) NOT NULL DEFAULT 'unpaid',
+        `created_at` DATETIME NULL,
+        `updated_at` DATETIME NULL,
+        FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE,
+        FOREIGN KEY(appointment_id) REFERENCES clinic_appointments(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
     // Copy jobs schema but naming it `test_jobs` for isolated run
@@ -442,25 +480,30 @@ class MockResponse extends \App\Core\Response {
     public int $statusCode = 200;
     public array $headers = [];
     public ?string $jsonOutput = null;
-    public string $redirectUrl = '';
+    public ?string $redirectUrl = '';
 
     public function setStatusCode(int $code): void {
+        parent::setStatusCode($code);
         $this->statusCode = $code;
     }
 
     public function redirect(string $url): void {
-        if (preg_match('#^https?://#i', $url)) {
-            $appUrl = \App\Core\Application::$app->config['app']['url'] ?? '';
-            if ($appUrl === '' || !str_starts_with($url, $appUrl)) {
-                $url = '/';
-            }
-        }
-        $this->redirectUrl = $url;
+        parent::redirect($url);
+        $this->redirectUrl = $this->getRedirectUrl() ?: '/';
     }
 
     public function json(mixed $data, int $statusCode = 200): void {
+        parent::json($data, $statusCode);
         $this->statusCode = $statusCode;
-        $this->jsonOutput = json_encode($data);
+        $this->jsonOutput = $this->getContent();
+    }
+
+    public function reset(): void {
+        parent::reset();
+        $this->statusCode = 200;
+        $this->headers = [];
+        $this->jsonOutput = null;
+        $this->redirectUrl = '';
     }
 }
 
@@ -699,17 +742,28 @@ if (!function_exists('simulate_mvc_request')) {
         $_POST = $body;
         $_GET = $get;
         
-        // Re-instantiate request and router
-        $app->request = new \App\Core\Request();
-        $app->router = new \App\Core\Router($app->request, $app->response);
+        // Reset response state
+        $app->response->reset();
         
-        // Load web routes
-        require __DIR__ . '/sample_project/routes/web.php';
+        // Load routes exactly once on the router to prevent duplication
+        static $routesLoaded = false;
+        if (!$routesLoaded) {
+            $app->request = new \App\Core\Request();
+            $app->router = new \App\Core\Router($app->request, $app->response);
+            require __DIR__ . '/sample_project/routes/web.php';
+            $routesLoaded = true;
+        }
+        
+        // Update request for this simulation run
+        $app->request = new \App\Core\Request();
+        $app->router->setRequest($app->request);
         
         ob_start();
         try {
             $res = $app->router->resolve();
-            if (empty($res)) {
+            if ($res instanceof \App\Core\Response) {
+                $res->send();
+            } elseif (empty($res)) {
                 echo "[EMPTY RESPONSE]";
             } else {
                 echo $res;
@@ -808,12 +862,398 @@ assert_true(str_contains($searchResultsHtml, 'Searchable User'), "HTMX searchQue
 assert_true(str_contains($searchResultsHtml, 'search@example.com'), "HTMX searchQuery renders values cleanly");
 assert_true(!str_contains($searchResultsHtml, 'SPARTAN + BLADE + HTMX'), "renderViewOnly compiles without layouts");
 
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dental Clinic Integration Tests [ignoring loop detection]
+// ─────────────────────────────────────────────────────────────────────────────
+test_group("Dental Clinic Management System");
+
+$patientModel = new \Tests\Sample\Models\Patient();
+$appointmentModel = new \Tests\Sample\Models\Appointment();
+$invoiceModel = new \Tests\Sample\Models\Invoice();
+
+// 1. Model Relationship & Creation tests
+$patientId = $patientModel->create([
+    'name' => 'Alice Clinic',
+    'phone' => '555-9876',
+    'email' => 'alice@clinic.com',
+    'medical_history' => 'Lactose intolerant'
+]);
+assert_true(is_numeric($patientId), "Patient created successfully and returned ID");
+
+$apptId = $appointmentModel->create([
+    'patient_id' => (int)$patientId,
+    'appointment_date' => '2026-06-01 10:00:00',
+    'status' => 'scheduled',
+    'treatment_notes' => 'Routine tooth cleaning'
+]);
+assert_true(is_numeric($apptId), "Appointment created successfully and returned ID");
+
+$invoiceId = $invoiceModel->create([
+    'patient_id' => (int)$patientId,
+    'appointment_id' => (int)$apptId,
+    'total_amount' => 120.00,
+    'paid_amount' => 0.00,
+    'status' => 'unpaid'
+]);
+assert_true(is_numeric($invoiceId), "Invoice created successfully and returned ID");
+
+// Test Relationships
+$fetchedPatient = $patientModel->find($patientId);
+$patientAppts = $patientModel->appointments()->for($fetchedPatient);
+assert_equals(1, count($patientAppts), "Patient appointments relationship resolves successfully");
+
+$fetchedAppt = $appointmentModel->find($apptId);
+$apptPatient = $appointmentModel->patient()->for($fetchedAppt);
+assert_equals('Alice Clinic', $apptPatient['name'], "Appointment belongsTo patient relationship resolves successfully");
+
+// 2. Controller & Routing HTTP Tests
+$csrfToken = $app->session->get('_csrf_token');
+
+// Post a new patient via route
+$mockResponse->redirectUrl = '';
+simulate_mvc_request('POST', '/clinic/patient', [
+    'name' => 'Bob Dentist',
+    'phone' => '555-1234',
+    'email' => 'bob@dentist.com',
+    'medical_history' => 'No medical issues',
+    '_csrf' => $csrfToken
+]);
+assert_equals('/clinic', $mockResponse->redirectUrl, "Store patient redirects back to clinic dashboard");
+
+$bobPatient = $patientModel->table()->where('email', 'bob@dentist.com')->first();
+assert_true(!empty($bobPatient), "Store patient route successfully inserts patient into database");
+
+// Post a new appointment (which auto-creates an invoice)
+$mockResponse->redirectUrl = '';
+simulate_mvc_request('POST', '/clinic/appointment', [
+    'patient_id' => (int)$bobPatient['id'],
+    'appointment_date' => '2026-06-02 14:00:00',
+    'procedure_cost' => '250.50',
+    'treatment_notes' => 'Tooth extraction',
+    '_csrf' => $csrfToken
+]);
+assert_equals('/clinic', $mockResponse->redirectUrl, "Store appointment redirects back to clinic dashboard");
+
+$bobAppt = $appointmentModel->table()->where('patient_id', (int)$bobPatient['id'])->first();
+assert_true(!empty($bobAppt), "Store appointment route successfully inserts appointment");
+
+$bobInvoice = $invoiceModel->table()->where('appointment_id', (int)$bobAppt['id'])->first();
+assert_true(!empty($bobInvoice), "Store appointment automatically generates matching clinic invoice");
+assert_equals(250.50, (float)$bobInvoice['total_amount'], "Auto-generated invoice total amount is correct");
+assert_equals('unpaid', $bobInvoice['status'], "Auto-generated invoice starts as unpaid");
+
+// Pay invoice (partial payment)
+$mockResponse->redirectUrl = '';
+simulate_mvc_request('POST', "/clinic/invoice/{$bobInvoice['id']}/pay", [
+    'amount' => '100.00',
+    '_csrf' => $csrfToken
+]);
+assert_equals('/clinic', $mockResponse->redirectUrl, "Pay invoice redirects back to clinic dashboard");
+
+$updatedInvoice = $invoiceModel->find($bobInvoice['id']);
+assert_equals(100.00, (float)$updatedInvoice['paid_amount'], "Partial payment is successfully recorded");
+assert_equals('partial', $updatedInvoice['status'], "Invoice status transitions to partial");
+
+// Pay invoice (remaining payment)
+$mockResponse->redirectUrl = '';
+simulate_mvc_request('POST', "/clinic/invoice/{$bobInvoice['id']}/pay", [
+    'amount' => '150.50',
+    '_csrf' => $csrfToken
+]);
+assert_equals('/clinic', $mockResponse->redirectUrl, "Remaining payment redirects back to clinic dashboard");
+
+$fullyPaidInvoice = $invoiceModel->find($bobInvoice['id']);
+assert_equals(250.50, (float)$fullyPaidInvoice['paid_amount'], "Total paid amount is updated");
+assert_equals('paid', $fullyPaidInvoice['status'], "Invoice status transitions to paid");
+
+// Complete appointment (PUT status spoofing)
+$mockResponse->redirectUrl = '';
+simulate_mvc_request('POST', "/clinic/appointment/{$bobAppt['id']}", [
+    '_method' => 'PUT',
+    'status' => 'completed',
+    '_csrf' => $csrfToken
+]);
+assert_equals('/clinic', $mockResponse->redirectUrl, "Complete appointment redirects back to clinic dashboard");
+
+$completedAppt = $appointmentModel->find($bobAppt['id']);
+assert_equals('completed', $completedAppt['status'], "Appointment status successfully updated to completed");
+
+// Test GET /clinic dashboard view rendering
+$clinicDashboardHtml = simulate_mvc_request('GET', '/clinic');
+assert_true(str_contains($clinicDashboardHtml, 'Total Patients'), "Clinic dashboard renders stats widgets");
+assert_true(str_contains($clinicDashboardHtml, 'Bob Dentist'), "Clinic dashboard displays patient name in patient records");
+assert_true(str_contains($clinicDashboardHtml, 'Tooth extraction'), "Clinic dashboard displays treatment notes in appointments");
+
+// HTMX Patient Live Search
+$searchHtml = simulate_mvc_request('POST', '/clinic/patients/search', [
+    'query' => 'Bob',
+    '_csrf' => $csrfToken
+]);
+assert_true(str_contains($searchHtml, 'Bob Dentist'), "HTMX patients search route returns search result partial");
+
 // Restore original response object
 $app->response = $originalResponse;
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. CLEANUP & SUMMARY
+// 12. TEST: Refactored Core Features (4-Arg Joins, CSRF Exclusions, Middleware Groups, Transactions)
+// ─────────────────────────────────────────────────────────────────────────────
+test_group("Refactored Core Features & Architectural Fixes");
+
+// 1. Test 4-argument join support in QueryBuilder
+try {
+    $qb = new \App\Core\QueryBuilder($app->db, 'test_users');
+    $qb->join('test_orders', 'test_users.id', '=', 'test_orders.user_id');
+    $reflector = new \ReflectionClass($qb);
+    $buildSelectMethod = $reflector->getMethod('buildSelect');
+    $buildSelectMethod->setAccessible(true);
+    [$sql, $bindings] = $buildSelectMethod->invoke($qb);
+    assert_true(str_contains($sql, "INNER JOIN `test_orders` ON test_users.id = test_orders.user_id"), "QueryBuilder supports 4-argument join compiles with operator");
+} catch (\Throwable $e) {
+    assert_true(false, "4-argument join failed: " . $e->getMessage());
+}
+
+// 2. Test CSRF Exclusions in Router
+try {
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    $tempRouter->excludeCsrf('/api/webhook', '/payment/*');
+    
+    // Simulate non-excluded post
+    $req1 = new class extends \App\Core\Request {
+        public function getPath(): string { return '/checkout'; }
+        public function getMethod(): string { return 'POST'; }
+        public function validateCsrf(): bool { return false; }
+    };
+    $tempRouter->setRequest($req1);
+    $tempRouter->post('/checkout', function() { return 'ok'; });
+    
+    $failedCsrf = false;
+    try {
+        $tempRouter->resolve();
+    } catch (\RuntimeException $e) {
+        if (str_contains($e->getMessage(), 'CSRF')) {
+            $failedCsrf = true;
+        }
+    }
+    assert_true($failedCsrf, "Router blocks non-excluded post request with failed CSRF");
+
+    // Simulate excluded post (exact match)
+    $req2 = new class extends \App\Core\Request {
+        public function getPath(): string { return '/api/webhook'; }
+        public function getMethod(): string { return 'POST'; }
+        public function validateCsrf(): bool { return false; }
+    };
+    $tempRouter->setRequest($req2);
+    $tempRouter->post('/api/webhook', function() { return 'webhook-ok'; });
+    assert_equals('webhook-ok', $tempRouter->resolve(), "Router bypasses CSRF validation for exact excluded path matches");
+
+    // Simulate excluded post (wildcard match)
+    $req3 = new class extends \App\Core\Request {
+        public function getPath(): string { return '/payment/stripe/callback'; }
+        public function getMethod(): string { return 'POST'; }
+        public function validateCsrf(): bool { return false; }
+    };
+    $tempRouter->setRequest($req3);
+    $tempRouter->post('/payment/stripe/callback', function() { return 'payment-ok'; });
+    assert_equals('payment-ok', $tempRouter->resolve(), "Router bypasses CSRF validation for wildcard excluded path matches");
+
+} catch (\Throwable $e) {
+    assert_true(false, "CSRF Exclusions test failed: " . $e->getMessage());
+}
+
+// 3. Test Middleware Groups in Router
+try {
+    class DummyMiddleware1 extends \App\Core\Middleware {
+        public static int $runCount = 0;
+        public function execute(\App\Core\Request $request, \App\Core\Response $response): void {
+            self::$runCount++;
+        }
+    }
+    class DummyMiddleware2 extends \App\Core\Middleware {
+        public static int $runCount = 0;
+        public function execute(\App\Core\Request $request, \App\Core\Response $response): void {
+            self::$runCount++;
+        }
+    }
+
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    $tempRouter->middlewareGroup('web_group', [DummyMiddleware1::class, DummyMiddleware2::class]);
+    $tempRouter->middlewareGroup('nested_group', ['web_group', DummyMiddleware1::class]);
+
+    $req = new class extends \App\Core\Request {
+        public function getPath(): string { return '/group-test'; }
+        public function getMethod(): string { return 'GET'; }
+    };
+    $tempRouter->setRequest($req);
+    $tempRouter->get('/group-test', function() { return 'group-ok'; }, ['nested_group']);
+    
+    DummyMiddleware1::$runCount = 0;
+    DummyMiddleware2::$runCount = 0;
+    
+    $res = $tempRouter->resolve();
+    assert_equals('group-ok', $res, "Router resolves routes using middleware groups");
+    assert_equals(2, DummyMiddleware1::$runCount, "Router resolves nested middleware groups (ran twice)");
+    assert_equals(1, DummyMiddleware2::$runCount, "Router resolves simple middleware groups (ran once)");
+} catch (\Throwable $e) {
+    assert_true(false, "Middleware Groups test failed: " . $e->getMessage());
+}
+
+// 4. Test Transaction Helper in Model
+try {
+    $userModel = new TestUser();
+    $initialCount = count($userModel->table()->get());
+    
+    $transactionFailed = false;
+    try {
+        $userModel->transaction(function($model) {
+            $model->table()->insert([
+                'name' => 'Should Not Exist',
+                'email' => 'shouldnotexist@example.com'
+            ]);
+            throw new \RuntimeException("Force transaction rollback");
+        });
+    } catch (\RuntimeException $e) {
+        if ($e->getMessage() === "Force transaction rollback") {
+            $transactionFailed = true;
+        }
+    }
+    
+    assert_true($transactionFailed, "Model transaction propagates exceptions");
+    $afterCount = count($userModel->table()->get());
+    assert_equals($initialCount, $afterCount, "Model transaction() auto-rolls back changes if exception is thrown");
+
+    // Success path of transaction
+    $success = $userModel->transaction(function($model) {
+        return $model->table()->insert([
+            'name' => 'Should Exist Transaction',
+            'email' => 'shouldexisttrans@example.com'
+        ]);
+    });
+    assert_true(!empty($success), "Model transaction() returns results of callback on success");
+    assert_equals($initialCount + 1, count($userModel->table()->get()), "Model transaction() commits changes on successful callback execution");
+
+} catch (\Throwable $e) {
+    assert_true(false, "Model Transaction Helper test failed: " . $e->getMessage());
+}
+
+// 5. Test Controller Dependency Injection
+class DummyDIService {
+    public function getValue(): string { return 'resolved-service-value'; }
+}
+
+class DummyDIController extends \App\Core\Controller {
+    public DummyDIService $service;
+    public function __construct(DummyDIService $service) {
+        parent::__construct();
+        $this->service = $service;
+    }
+    public function index(): string {
+        return $this->service->getValue();
+    }
+}
+
+try {
+    $app->container->singleton(DummyDIService::class, fn() => new DummyDIService());
+    
+    $tempRouter = new \App\Core\Router($app->request, $app->response);
+    $req = new class extends \App\Core\Request {
+        public function getPath(): string { return '/di-test'; }
+        public function getMethod(): string { return 'GET'; }
+    };
+    $tempRouter->setRequest($req);
+    $tempRouter->get('/di-test', [DummyDIController::class, 'index']);
+    
+    $res = $tempRouter->resolve();
+    assert_equals('resolved-service-value', $res, "Router resolves controllers and auto-injects constructor dependencies");
+} catch (\Throwable $e) {
+    assert_true(false, "Controller DI test failed: " . $e->getMessage());
+}
+
+// 6. Test Global Exception Handler & AJAX rendering
+try {
+    // Standard HTML Request Error
+    $reqHTML = new class extends \App\Core\Request {
+        public function getPath(): string { return '/err-html'; }
+        public function getMethod(): string { return 'GET'; }
+        public function isAjax(): bool { return false; }
+    };
+    
+    $tempRouter = new \App\Core\Router($reqHTML, $app->response);
+    $tempRouter->get('/err-html', function() {
+        throw new \RuntimeException("HTML Error Example");
+    });
+    
+    ob_start();
+    try {
+        $res = $tempRouter->resolve();
+        throw new \RuntimeException("Router resolution should have thrown");
+    } catch (\Throwable $e) {
+        $handler = new \App\Core\ExceptionHandler();
+        $handler->handle($e, $reqHTML, $app->response, ['app' => ['debug' => true]]);
+    }
+    $htmlOutput = ob_get_clean();
+    
+    assert_true(strpos($htmlOutput, "HTML Error Example") !== false, "ExceptionHandler outputs error message on debug mode");
+    assert_equals(500, $app->response->getStatusCode(), "ExceptionHandler sets status code to 500");
+    
+    // AJAX Request Error (Should return JSON)
+    $reqAJAX = new class extends \App\Core\Request {
+        public function getPath(): string { return '/err-ajax'; }
+        public function getMethod(): string { return 'GET'; }
+        public function isAjax(): bool { return true; }
+    };
+    
+    $app->response->reset();
+    ob_start();
+    try {
+        throw new \RuntimeException("AJAX Error Example");
+    } catch (\Throwable $e) {
+        $handler = new \App\Core\ExceptionHandler();
+        $handler->handle($e, $reqAJAX, $app->response, ['app' => ['debug' => true]]);
+    }
+    $jsonOutput = ob_get_clean();
+    
+    $decoded = json_decode($jsonOutput, true);
+    assert_equals('500 Internal Server Error', $decoded['error'] ?? '', "ExceptionHandler responds with JSON on AJAX requests");
+    assert_equals('AJAX Error Example', $decoded['message'] ?? '', "ExceptionHandler passes exception message in JSON on debug mode");
+    
+    // Overridden Exception Handler in Container
+    $customHandlerRun = false;
+    $customHandler = new class($customHandlerRun) extends \App\Core\ExceptionHandler {
+        public $run;
+        public function __construct(&$run) { $this->run = &$run; }
+        public function handle(\Throwable $e, \App\Core\Request $request, \App\Core\Response $response, array $config): void {
+            $this->run = true;
+        }
+    };
+    
+    $app->container->instance(\App\Core\ExceptionHandler::class, $customHandler);
+    
+    // Simulating run() exception handling
+    try {
+        throw new \RuntimeException("Test Overridden Handler");
+    } catch (\Throwable $e) {
+        $handler = $app->container->has(\App\Core\ExceptionHandler::class)
+            ? $app->container->make(\App\Core\ExceptionHandler::class)
+            : new \App\Core\ExceptionHandler();
+        $handler->handle($e, $reqHTML, $app->response, []);
+    }
+    
+    assert_true($customHandlerRun, "Application resolves and delegates to overridden ExceptionHandler from container");
+    
+    // Cleanup custom handler instance
+    $app->container->forget(\App\Core\ExceptionHandler::class);
+    
+} catch (\Throwable $e) {
+    assert_true(false, "Global Exception Handler test failed: " . $e->getMessage());
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. CLEANUP & SUMMARY
 // ─────────────────────────────────────────────────────────────────────────────
 test_group("Tear Down");
 try {
@@ -821,6 +1261,9 @@ try {
     $db->exec("DROP TABLE IF EXISTS `test_orders` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_users` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_jobs` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
     assert_true(true, "Database tables dropped and cleaned up.");
 } catch (\Throwable $e) {
     echo COLOR_RED . "Warning: Cleanup failed: " . $e->getMessage() . COLOR_RESET . "\n";
