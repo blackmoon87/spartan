@@ -106,7 +106,8 @@ Follow these specifications and structural rules when writing, refactoring, or g
 
 ### Request & File Uploads
 - Access all inputs and files through the injected `$this->request` instance.
-- **Input parameters:** Use `$this->request->get($key)`, `$this->request->post($key)`, `$this->request->input($key)`, or `$this->request->getBody()`.
+- **Input parameters:** Use `$this->request->get($key)`, `$this->request->post($key)`, `$this->request->input($key)`, or `$this->request->getBody()`. These methods automatically parse and merge JSON request payloads (when Content-Type is `application/json`).
+- **HTTP Headers:** Never use `$_SERVER` directly to fetch request headers. Use `$this->request->header('Header-Name')` (e.g. `$this->request->header('Authorization')`).
 - **File Uploads:** Never access `$_FILES` directly. Use:
   - `$this->request->file('field_name')` to retrieve a specific file metadata array.
   - `$this->request->getFiles()` to get all uploaded files.

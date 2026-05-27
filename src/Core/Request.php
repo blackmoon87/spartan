@@ -6,6 +6,8 @@ namespace App\Core;
 
 class Request
 {
+    protected ?array $jsonParams = null;
+
     /**
      * Get request URI path, stripping query parameters.
      */
@@ -52,42 +54,88 @@ class Request
     }
 
     /**
-     * Retrieve a parameter from the request body ($_POST).
+     * Retrieve a parameter from the request body ($_POST or JSON payload).
      */
     public function post(string $key, mixed $default = null): mixed
     {
-        return $_POST[$key] ?? $default;
+        return $_POST[$key] ?? $this->getJsonParams()[$key] ?? $default;
     }
 
     /**
-     * Retrieve a parameter from either POST or GET inputs.
+     * Retrieve a parameter from either POST, JSON payload, or GET inputs.
      */
     public function input(string $key, mixed $default = null): mixed
     {
-        return $_POST[$key] ?? $_GET[$key] ?? $default;
+        return $_POST[$key] ?? $this->getJsonParams()[$key] ?? $_GET[$key] ?? $default;
     }
 
     /**
      * Retrieve all inputs for the current request method as a raw associative array.
-     *
-     * Merge order: GET keys are loaded first, POST keys are loaded second.
-     * If the same key exists in both $_GET and $_POST, the POST value wins.
-     * Use get() or post() directly if you need to target a specific source.
      */
     public function getBody(): array
     {
         $body = [];
-        if ($this->isGet()) {
-            foreach ($_GET as $key => $value) {
-                $body[$key] = $value;
-            }
+        
+        foreach ($_GET as $key => $value) {
+            $body[$key] = $value;
         }
-        if ($this->isPost()) {
-            foreach ($_POST as $key => $value) {
-                $body[$key] = $value;
-            }
+
+        foreach ($_POST as $key => $value) {
+            $body[$key] = $value;
         }
+
+        foreach ($this->getJsonParams() as $key => $value) {
+            $body[$key] = $value;
+        }
+
         return $body;
+    }
+
+    /**
+     * Retrieve a request header value.
+     */
+    public function header(string $key, ?string $default = null): ?string
+    {
+        $normalizedKey = str_replace('-', '_', strtoupper($key));
+        
+        $serverKey = 'HTTP_' . $normalizedKey;
+        if (isset($_SERVER[$serverKey])) {
+            return $_SERVER[$serverKey];
+        }
+
+        if (isset($_SERVER[$normalizedKey])) {
+            return $_SERVER[$normalizedKey];
+        }
+
+        if (function_exists('apache_request_headers')) {
+            $headers = apache_request_headers();
+            foreach ($headers as $hKey => $hVal) {
+                if (strcasecmp($hKey, $key) === 0) {
+                    return $hVal;
+                }
+            }
+        }
+
+        return $default;
+    }
+
+    /**
+     * Parse and retrieve the JSON request body parameters.
+     */
+    protected function getJsonParams(): array
+    {
+        if ($this->jsonParams === null) {
+            $this->jsonParams = [];
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+            if (str_contains($contentType, 'application/json')) {
+                $raw = file_get_contents('php://input');
+                $decoded = json_decode($raw ?: '', true);
+                if (is_array($decoded)) {
+                    $this->jsonParams = $decoded;
+                }
+            }
+        }
+        return $this->jsonParams;
     }
 
     /**

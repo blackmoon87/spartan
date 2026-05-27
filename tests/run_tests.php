@@ -547,6 +547,28 @@ assert_true(is_array($fileRequest->getFiles()), "Request::getFiles() returns the
 assert_equals(null, $fileRequest->file('non_existent'), "Request::file() returns null for non-existent upload field");
 $_FILES = []; // clean up
 
+// Test Request Header Helper
+$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer my-api-token-123';
+$_SERVER['CONTENT_TYPE'] = 'application/json';
+$headerRequest = new \App\Core\Request();
+assert_equals('Bearer my-api-token-123', $headerRequest->header('Authorization'), "Request::header() retrieves correct header value");
+assert_equals('application/json', $headerRequest->header('Content-Type'), "Request::header() normalizes Content-Type header name");
+assert_equals(null, $headerRequest->header('X-Non-Existent'), "Request::header() returns null for undefined headers");
+unset($_SERVER['HTTP_AUTHORIZATION'], $_SERVER['CONTENT_TYPE']);
+
+// Test Request JSON Parsing Helper
+$jsonRequest = new class extends \App\Core\Request {
+    public function setJsonParams(array $data): void {
+        $this->jsonParams = $data;
+    }
+};
+$jsonRequest->setJsonParams(['username' => 'alice', 'email' => 'alice@example.com']);
+assert_equals('alice', $jsonRequest->input('username'), "Request::input() retrieves values from JSON body");
+assert_equals('alice@example.com', $jsonRequest->post('email'), "Request::post() retrieves values from JSON body");
+assert_equals('default_val', $jsonRequest->input('non_existent', 'default_val'), "Request input helper returns fallback for missing JSON keys");
+assert_equals('alice', $jsonRequest->getBody()['username'] ?? null, "Request::getBody() merges parsed JSON parameters");
+
+
 
 
 // Test Security Headers Middleware
