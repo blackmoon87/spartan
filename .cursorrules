@@ -103,6 +103,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
 - Use `$this->redirect('/path')` and `$this->json($data)` shortcuts instead of calling Response directly.
 - Render views using `$this->render('view_name', ['param' => $value])`.
 - For HTMX / AJAX updates, use the shortcut `$this->renderViewOnly('view_name', ['param' => $value])` to compile and return the partial template content without layout wrapping.
+- Share variables globally across all views using `$this->share('key', $value)` within any Controller action, or using `Application::$app->view->share('key', $value)` during application bootstrapping.
 
 ### Request & File Uploads
 - Access all inputs and files through the injected `$this->request` instance.
@@ -125,7 +126,8 @@ Follow these specifications and structural rules when writing, refactoring, or g
 $this->table()->get();                                      // all rows
 $this->table()->where('active', 1)->get();                  // filtered
 $this->table()->where('role', 'admin')->first();            // first match or null
-$this->table()->find($id);                                  // by primary key
+$this->table()->find($id);                                  // by primary key (returns raw database ?array)
+(new User())->findInstance($id);                            // by primary key (returns hydrated ?Model object instance)
 $this->table()->where('status', 'paid')->count();           // count
 $this->table()->where('active', 1)->exists();              // boolean
 
@@ -617,5 +619,8 @@ When the developer requests a new feature (e.g. "Add a blog detail page"), follo
 - **HTMX Partial Swaps**: Any route/controller action triggered by HTMX (e.g. `hx-get`, `hx-post`) that expects a targeted swap inside a page container MUST return ONLY the partial HTML code.
   - The controller MUST return the view using `$this->renderViewOnly('template_name', $data)`.
   - Never return a full layout page for HTMX swaps, as it duplicates headers/scripts and breaks the DOM.
+- **Global View Variables & authUser**:
+  - Global variables can be shared across all views dynamically via `View::share()` or Controller `$this->share()`.
+  - Every rendered view is automatically injected with the `$authUser` variable (representing the logged-in `User` instance, or `null` if the user is a guest) to prevent "Undefined variable" warnings when rendering conditional auth checks (e.g., `@if($authUser)`).
 - **Alpine.js for Client State**: Keep JavaScript in templates minimal. Use Alpine.js (`x-data`, `x-init`, `x-model`, `x-on`) for interactive client-side components (like toggle menus, counters, notifications, and client calculations). Avoid inline raw jQuery or heavy vanilla `<script>` tags.
 
