@@ -79,8 +79,8 @@ Follow these specifications and structural rules when writing, refactoring, or g
   - **No SQL outside Models**: Absolutely NO database queries, direct PDO calls, or SQL strings are allowed in Controller or View files. All data access must be encapsulated inside Model files extending `App\Core\Model`.
   - **No Output escaping inside Core/Request**: Inputs are read raw to prevent encoding corruption. Output escaping is done exclusively in Views.
 - **Security Rules (all mandatory)**:
-  - **XSS**: Every variable echoed inside a View or Layout MUST use `$this->escape($var)`. Raw `echo $var` or `<?= $var ?>` without escape is forbidden.
-  - **CSRF**: Every HTML `<form method="POST">` MUST contain `<?= $this->csrfToken() ?>`. The Router validates all POST requests automatically across form, AJAX, and JSON bodies.
+  - **XSS**: Every variable echoed inside a View or Layout MUST be escaped. Use `{{ $var }}` or `@escape($var)` in Blade templates, and `$this->escape($var)` in native PHP templates. Raw `echo $var` or `<?= $var ?>` without escaping is forbidden.
+  - **CSRF**: Every HTML `<form method="POST">` MUST contain CSRF protection. Use `@csrf` in Blade templates, or `<?= $this->csrfToken() ?>` in native PHP templates. The Router validates all POST requests automatically across form, AJAX, and JSON bodies.
   - **Session Fixation**: `$this->session->regenerate()` MUST be called immediately after every successful login or role/privilege change. Never skip this.
   - **Session Cookie**: Session is automatically started with `HttpOnly=true`, `SameSite=Lax`, and `Secure` (auto-detected). Never call `session_start()` manually outside of `Session::__construct()`.
   - **View Path Safety**: Never pass user-controlled input directly to `$this->render()`. View names are whitelisted to `[a-zA-Z0-9_/]` only. Path traversal attempts (`../../`) throw an `InvalidArgumentException`.
@@ -100,6 +100,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
 - Action methods should return `string` (rendered view content) or void (when redirecting/returning JSON).
 - Use `$this->redirect('/path')` and `$this->json($data)` shortcuts instead of calling Response directly.
 - Render views using `$this->render('view_name', ['param' => $value])`.
+- For HTMX / AJAX updates, use the shortcut `$this->renderViewOnly('view_name', ['param' => $value])` to compile and return the partial template content without layout wrapping.
 
 ### Models
 - Create models under `src/Models/` and extend `App\Core\Model`.
@@ -438,5 +439,5 @@ When the developer requests a new feature (e.g. "Add a blog detail page"), follo
 3. **Create/Update Model**: If database integration is required, create the model in `src/Models/`. Use `$this->table()->...` — never raw SQL.
 4. **Create Service** (if needed): For complex multi-step logic, create a `src/Services/MyService.php`. Register it in the Container.
 5. **Create Controller Action**: Fetch inputs via `$this->request`, resolve services via `$this->make()`, query Models, dispatch events via `$this->event()`, return rendered view or JSON.
-6. **Create View Template**: Create `.php` in `src/Views/`. Use `$this->escape()` for all output. Use `<?= $this->csrfToken() ?>` in every form.
-7. **Cache where applicable**: Wrap expensive reads in `Cache::remember()` with a sensible TTL.
+6. **Create View Template**: Create `.blade.php` in `src/Views/` to use BladeOne syntax (supports `@csrf`, `@flash`, `@escape`, and `{{ $var }}` auto-escaping), or `.php` to write native PHP templates (requires manual `$this->escape()` and `<?= $this->csrfToken() ?>`).
+7. **Cache where applicable**: Wrap expensive database reads in `Cache::remember()` with a sensible TTL.
