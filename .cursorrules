@@ -504,6 +504,54 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
   Application::$app->container->singleton(ExceptionHandler::class, fn() => new MyCustomExceptionHandler());
   ```
 
+### Daily PSR-3 Logger
+- **Rule**: Standard daily-rotated log tracking is handled natively by `App\Core\Logger` supporting standard levels (debug, info, notice, warning, error, critical, alert, emergency) and context placeholder interpolation.
+- **Accessing the Logger**: Use `Application::$app->logger` or resolve `Logger::class` from the Service Container.
+  ```php
+  use App\Core\Logger;
+  
+  // Interpolation: logs "User 123 logged in from 127.0.0.1" in storage/logs/app-YYYY-MM-DD.log
+  Application::$app->logger->info("User {user_id} logged in from {ip}", [
+      'user_id' => 123,
+      'ip' => '127.0.0.1'
+  ]);
+  ```
+- **Error Logs**: Uncaught exceptions are automatically routed to the daily log with full stack trace formatting by `ExceptionHandler`.
+
+### SQL Dialects
+- **Rule**: Spartan supports driver-independent SQL compilation. The `QueryBuilder` automatically detects the active connection driver (e.g., MySQL or SQLite) and uses the corresponding dialect:
+  - **MySQL (`MysqlDialect`)**: Escapes table and column identifiers using backticks (`` ` ``).
+  - **SQLite (`SqliteDialect`)**: Escapes table and column identifiers using double quotes (`"`).
+- **Direct SQL Queries**: Avoid writing hardcoded quotes in raw SQL queries; where quotes are necessary, write driver-aware queries or construct queries programmatically using the `QueryBuilder`.
+
+### FormRequests
+- **Rule**: Input validation and authorization logic can be encapsulated inside dedicated `FormRequest` classes under `src/Controllers/` or custom request folders.
+- **Implementation**: Extend abstract `App\Core\FormRequest`. Define a `rules()` method returning rules mappings and optionally override `authorize()` for route permission checks.
+  ```php
+  namespace App\Controllers\Requests;
+  
+  use App\Core\FormRequest;
+  
+  class StorePostRequest extends FormRequest {
+      public function authorize(): bool {
+          return $this->session->get('role') === 'admin';
+      }
+      public function rules(): array {
+          return [
+              'title' => 'required|string|min:5|max:100',
+              'body'  => 'required|string'
+          ];
+      }
+  }
+  ```
+- **Controller Action Injection**: Type-hint the specific `FormRequest` class in the controller method. The Router will automatically instantiate, validate, and inject the request. If validation fails, it redirects back with flashed errors (for HTML) or returns `422 Unprocessable Content` (for AJAX).
+  ```php
+  public function store(StorePostRequest $request) {
+      $data = $request->getBody(); // contains validated parameters
+      // ...
+  }
+  ```
+
 ---
 
 ## 4. Workflow to Add a New Feature
