@@ -20,10 +20,15 @@ use RuntimeException;
  *        ->limit(10)
  *        ->get();
  */
+use App\Core\Database\DialectInterface;
+use App\Core\Database\MysqlDialect;
+use App\Core\Database\SqliteDialect;
+
 class QueryBuilder
 {
     private PDO    $db;
     private string $table;
+    private DialectInterface $dialect;
 
     private array   $selects   = ['*'];
     private array   $wheres    = [];
@@ -50,6 +55,13 @@ class QueryBuilder
         }
         $this->db    = $db;
         $this->table = $table;
+
+        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $this->dialect = new SqliteDialect();
+        } else {
+            $this->dialect = new MysqlDialect();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -295,9 +307,9 @@ class QueryBuilder
         }
 
         $columns  = array_keys($data);
-        $colSQL   = implode(', ', array_map(fn($c) => "`{$c}`", $columns));
+        $colSQL   = implode(', ', array_map(fn($c) => $this->dialect->quoteIdentifier($c), $columns));
         $valSQL   = implode(', ', array_fill(0, count($columns), '?'));
-        $sql      = "INSERT INTO `{$this->table}` ({$colSQL}) VALUES ({$valSQL})";
+        $sql      = "INSERT INTO " . $this->dialect->quoteTable($this->table) . " ({$colSQL}) VALUES ({$valSQL})";
 
         $this->execute($sql, array_values($data));
         return $this->db->lastInsertId();
@@ -323,10 +335,10 @@ class QueryBuilder
             throw new RuntimeException('update() requires at least one column.');
         }
 
-        $setSQL   = implode(', ', array_map(fn($c) => "`{$c}` = ?", array_keys($data)));
+        $setSQL   = implode(', ', array_map(fn($c) => $this->dialect->quoteIdentifier($c) . " = ?", array_keys($data)));
         [$whereSQL, $whereBindings] = $this->buildWhere();
 
-        $sql      = "UPDATE `{$this->table}` SET {$setSQL}{$whereSQL}";
+        $sql      = "UPDATE " . $this->dialect->quoteTable($this->table) . " SET {$setSQL}{$whereSQL}";
         $bindings = array_merge(array_values($data), $whereBindings);
 
         $stmt = $this->execute($sql, $bindings);
@@ -350,7 +362,7 @@ class QueryBuilder
         }
 
         [$whereSQL, $bindings] = $this->buildWhere();
-        $sql  = "DELETE FROM `{$this->table}`{$whereSQL}";
+        $sql  = "DELETE FROM " . $this->dialect->quoteTable($this->table) . "{$whereSQL}";
         $stmt = $this->execute($sql, $bindings);
         return $stmt->rowCount();
     }
@@ -364,7 +376,7 @@ class QueryBuilder
      */
     public function truncate(): int
     {
-        $stmt = $this->execute("DELETE FROM `{$this->table}`", []);
+        $stmt = $this->execute("DELETE FROM " . $this->dialect->quoteTable($this->table), []);
         return $stmt->rowCount();
     }
 
@@ -397,12 +409,12 @@ class QueryBuilder
         $cols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->selects));
         [$whereSQL, $bindings] = $this->buildWhere();
 
-        $sql  = "SELECT {$cols} FROM `{$this->table}`";
+        $sql  = "SELECT {$cols} FROM " . $this->dialect->quoteTable($this->table);
 
         // Append JOIN clauses
         foreach ($this->joins as $join) {
             $operator = $join['operator'] ?? '=';
-            $sql .= " {$join['type']} JOIN `{$join['table']}` ON {$join['first']} {$operator} {$join['second']}";
+            $sql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$join['first']} {$operator} {$join['second']}";
         }
 
         $sql .= $whereSQL;
@@ -474,7 +486,7 @@ class QueryBuilder
         }
 
         $parts = explode('.', $column);
-        $escaped = array_map(fn($p) => $p === '*' ? '*' : '`' . str_replace('`', '', $p) . '`', $parts);
+        $escaped = array_map(fn($p) => $p === '*' ? '*' : $this->dialect->quoteIdentifier($p), $parts);
         return implode('.', $escaped);
     }
 }

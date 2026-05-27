@@ -13,6 +13,18 @@ class ExceptionHandler
     {
         $response->setStatusCode(500);
 
+        if (isset(Application::$app->logger)) {
+            Application::$app->logger->error(
+                "Uncaught Exception: {message} in {file}:{line}\nStack trace:\n{trace}",
+                [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ]
+            );
+        }
+
         if ($request->isAjax()) {
             $response->json([
                 'error' => '500 Internal Server Error',

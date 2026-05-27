@@ -255,8 +255,39 @@ class Router
             if (!method_exists($controller, $action)) {
                 throw new \BadMethodCallException("Method [{$action}] does not exist on controller [{$controllerClass}].");
             }
+
+            // Inspect action parameters for Request or FormRequest dependencies
+            $reflection = new \ReflectionMethod($controllerClass, $action);
+            $actionArgs = [];
             
-            return call_user_func([$controller, $action], ...$params);
+            foreach ($reflection->getParameters() as $parameter) {
+                $type = $parameter->getType();
+                if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                    $typeName = $type->getName();
+                    if ($typeName === \App\Core\Request::class || is_subclass_of($typeName, \App\Core\Request::class)) {
+                        if (is_subclass_of($typeName, \App\Core\FormRequest::class)) {
+                            /** @var \App\Core\FormRequest $formRequest */
+                            $formRequest = new $typeName();
+                            $formRequest->validate();
+                            $actionArgs[] = $formRequest;
+                        } else {
+                            $actionArgs[] = Application::$app->request;
+                        }
+                        continue;
+                    }
+                }
+                
+                $name = $parameter->getName();
+                if (isset($params[$name])) {
+                    $actionArgs[] = $params[$name];
+                } elseif (!empty($params)) {
+                    $actionArgs[] = array_shift($params);
+                } else {
+                    $actionArgs[] = $parameter->isDefaultValueAvailable() ? $parameter->getDefaultValue() : null;
+                }
+            }
+            
+            return call_user_func_array([$controller, $action], $actionArgs);
         }
 
         throw new \RuntimeException("Invalid route callback type.");

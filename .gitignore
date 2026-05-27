@@ -8,6 +8,10 @@
 /storage/cache/*
 !/storage/cache/.gitkeep
 
+# Logs
+/storage/logs/*
+!/storage/logs/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

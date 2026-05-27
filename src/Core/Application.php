@@ -12,6 +12,7 @@ class Application
      * PHP 8.1+ readonly enforcement.
      */
     public static Application $app;
+    public Logger    $logger;
     public Router    $router;
     public Request   $request;
     public Response  $response;
@@ -32,6 +33,11 @@ class Application
         self::$app = $this;
         $this->config    = $config;
         $this->container = new Container();
+        $this->logger    = new Logger();
+        
+        // Register logger in container
+        $this->container->singleton(Logger::class, fn() => $this->logger);
+
         $this->events    = new EventDispatcher();
         $this->session   = new Session();
         $this->request   = new Request();

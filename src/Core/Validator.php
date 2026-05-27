@@ -208,7 +208,9 @@ class Validator
             throw new \InvalidArgumentException("Validator: 'unique' rule requires a table name. Use 'unique:table,column'.");
         }
 
-        $stmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM `{$table}` WHERE `{$column}` = ?");
+        $driver = $this->db->getAttribute(\PDO::ATTR_DRIVER_NAME);
+        $quote = ($driver === 'sqlite') ? '"' : '`';
+        $stmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM {$quote}{$table}{$quote} WHERE {$quote}{$column}{$quote} = ?");
         $stmt->execute([(string) $value]);
         $count = (int) ($stmt->fetch(\PDO::FETCH_ASSOC)['cnt'] ?? 0);
 

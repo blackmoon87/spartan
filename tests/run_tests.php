@@ -28,6 +28,7 @@ define('COLOR_RED', "\033[31m");
 define('COLOR_CYAN', "\033[36m");
 define('COLOR_YELLOW', "\033[33m");
 define('COLOR_RESET', "\033[0m");
+define('SPARTAN_TESTING', true);
 
 $testsCount = 0;
 $assertionsCount = 0;
@@ -1443,6 +1444,138 @@ try {
 
 } catch (\Throwable $e) {
     assert_true(false, "Rate Limiter test failed: " . $e->getMessage());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. LOGGER, DIALECTS & FORMREQUESTS
+// ─────────────────────────────────────────────────────────────────────────────
+test_group("Logger, Dialects, and FormRequests");
+try {
+    // A. LOGGER TEST
+    $logPath = __DIR__ . '/scratch_logs';
+    $logger = new \App\Core\Logger($logPath);
+    $logger->info("User {user_id} logged in from {ip}", ['user_id' => 999, 'ip' => '127.0.0.1']);
+    
+    $todayLog = $logPath . '/app-' . date('Y-m-d') . '.log';
+    assert_true(file_exists($todayLog), "Logger creates daily log file successfully");
+    $logContent = file_get_contents($todayLog);
+    assert_true(str_contains($logContent, '[INFO]'), "Logger writes correct log level prefix");
+    assert_true(str_contains($logContent, 'User 999 logged in from 127.0.0.1'), "Logger interpolates context placeholders correctly");
+    
+    // Save original logger
+    $originalLogger = $app->logger;
+    $app->logger = $logger;
+    $app->container->singleton(\App\Core\Logger::class, fn() => $logger);
+    
+    // Test Exception Logging
+    $handler = new \App\Core\ExceptionHandler();
+    $mockReq = new \App\Core\Request();
+    $mockRes = new \App\Core\Response();
+    
+    ob_start();
+    $handler->handle(new \Exception("Autolog exception trace test"), $mockReq, $mockRes, ['app' => ['debug' => false]]);
+    ob_end_clean();
+    
+    $logContentAfter = file_get_contents($todayLog);
+    assert_true(str_contains($logContentAfter, 'Autolog exception trace test'), "ExceptionHandler automatically logs caught exceptions to daily log");
+    
+    // Restore original logger
+    $app->logger = $originalLogger;
+    $app->container->singleton(\App\Core\Logger::class, fn() => $originalLogger);
+    
+    // Cleanup logger scratch directory
+    @unlink($todayLog);
+    @rmdir($logPath);
+
+    // B. DIALECTS TEST
+    $mysqlBuilder = new \App\Core\QueryBuilder($db, 'test_users');
+    $refMethodObj = new \ReflectionMethod($mysqlBuilder, 'buildSelect');
+    $refMethodObj->setAccessible(true);
+    
+    [$mysqlSql, $mysqlBindings] = $refMethodObj->invoke($mysqlBuilder);
+    assert_true(str_contains($mysqlSql, 'SELECT * FROM `test_users`'), "QueryBuilder MysqlDialect compiles table name with backticks");
+
+    $sqlitePdo = new \PDO('sqlite::memory:');
+    $sqliteBuilder = new \App\Core\QueryBuilder($sqlitePdo, 'test_users');
+    [$sqliteSql, $sqliteBindings] = $refMethodObj->invoke($sqliteBuilder);
+    assert_true(str_contains($sqliteSql, 'SELECT * FROM "test_users"'), "QueryBuilder SqliteDialect compiles table name with double quotes");
+
+    // C. FORMREQUESTS TEST
+    if (!class_exists('TestUserStoreRequest', false)) {
+        class TestUserStoreRequest extends \App\Core\FormRequest
+        {
+            public function rules(): array
+            {
+                return [
+                    'username' => 'required|min:4',
+                    'email'    => 'required|email'
+                ];
+            }
+        }
+    }
+
+    if (!class_exists('TestFormController', false)) {
+        class TestFormController
+        {
+            public function store(TestUserStoreRequest $request): string
+            {
+                return "Stored " . $request->input('username');
+            }
+        }
+    }
+
+    if (!class_exists('TestStandardRequestController', false)) {
+        class TestStandardRequestController
+        {
+            public function handle(\App\Core\Request $request): string
+            {
+                return "Request path: " . $request->getPath();
+            }
+        }
+    }
+
+    $tempRouter2 = new \App\Core\Router($app->request, $app->response);
+    $tempRouter2->post('/test-form-request', [TestFormController::class, 'store']);
+    $tempRouter2->get('/test-std-request', [TestStandardRequestController::class, 'handle']);
+
+    // Simulate validation success
+    $_SERVER['REQUEST_URI'] = '/test-form-request';
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST = ['username' => 'valid_user', 'email' => 'valid@example.com', '_csrf' => $csrfToken];
+    $app->request = new \App\Core\Request();
+    $tempRouter2->setRequest($app->request);
+    $app->response->reset();
+    $resFormSuccess = $tempRouter2->resolve();
+    assert_equals("Stored valid_user", $resFormSuccess, "FormRequest auto-injection resolves correctly on successful validation");
+
+    // Simulate validation failure
+    $_POST = ['username' => 'abc', 'email' => 'invalid-email', '_csrf' => $csrfToken];
+    $app->request = new \App\Core\Request();
+    $tempRouter2->setRequest($app->request);
+    $app->response->reset();
+    
+    $failed = false;
+    try {
+        $tempRouter2->resolve();
+    } catch (\RuntimeException $e) {
+        $failed = true;
+        assert_true(str_contains($e->getMessage(), 'Validation Failed'), "FormRequest throws validation exception in test environment");
+        assert_true(str_contains($e->getMessage(), 'username'), "FormRequest failure exception includes username error messages");
+        assert_true(str_contains($e->getMessage(), 'email'), "FormRequest failure exception includes email error messages");
+    }
+    assert_true($failed, "FormRequest fails validation on invalid inputs");
+
+    // Simulate Standard Request Injection
+    $_SERVER['REQUEST_URI'] = '/test-std-request';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $app->request = new \App\Core\Request();
+    $tempRouter2->setRequest($app->request);
+    $app->response->reset();
+    $resStdReq = $tempRouter2->resolve();
+    assert_equals("Request path: /test-std-request", $resStdReq, "Standard Request auto-injection resolves and passes active request");
+
+} catch (\Throwable $e) {
+    assert_true(false, "Logger, Dialect or FormRequest test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }
 
 
