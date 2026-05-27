@@ -10,7 +10,9 @@ A hand-crafted PHP 8.1+ MVC framework built for developers who want to understan
 
 | Layer | Capability |
 |---|---|
-| **Router** | GET / POST / PUT / PATCH / DELETE + HTML form method spoofing |
+| **Router** | GET / POST / PUT / PATCH / DELETE + HTML form method spoofing & middleware groups |
+| **Request** | Auto JSON body parsing, file upload helpers, header resolver, client IP resolver |
+| **Rate Limiter** | Parameterized rate limiting middleware (`rate_limit:100,60`) with Client IP tracking |
 | **QueryBuilder** | Fluent, fully parameterized — no raw SQL. Write guards on `update()` / `delete()` |
 | **Model Relationships** | `hasMany`, `hasOne`, `belongsTo` + eager loading (no N+1) |
 | **Async Job Queue** | DB-backed queue with retry + exponential backoff |
@@ -236,8 +238,53 @@ HTMX handles server-client updates without writing complex JavaScript, while Alp
       // Render ONLY the partial list view
       return $this->renderViewOnly('search_results', ['users' => $results]);
   }
-  ```
+### Middlewares & Rate Limiting
 
+Spartan supports mapping middleware aliases and groups in `Router.php` and passing dynamic parameters (e.g. `rate_limit:limit,window`).
+
+#### 1. Defining Parameterized Middleware Routes
+```php
+$app->router->get('/dashboard', [DashboardController::class, 'index'], [
+    'auth',
+    'rate_limit:100,60' // Max 100 requests per 60 seconds (IP-based)
+]);
+```
+
+#### 2. How the Rate Limiter Middleware Works
+The `RateLimitMiddleware` checks the user's IP address and rate limits the route dynamically:
+* In case of violations, it returns a `429 Too Many Requests` status code and terminates the route cycle early.
+* Adds standard headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After`.
+
+---
+
+### Request & API Inputs
+
+Spartan's Request class encapsulates all query parameters, form data, uploaded files, and HTTP headers.
+
+#### 1. Automatic JSON Body Parsing
+When a client sends a request with `Content-Type: application/json`, the request body is automatically decoded and merged. You can retrieve inputs using standard methods:
+```php
+// Automatically parses JSON input: {"title": "Hello"}
+$title = $this->request->input('title');
+$body  = $this->request->getBody();
+```
+
+#### 2. Request Headers Helper
+```php
+$token = $this->request->header('Authorization'); // Bearer <token>
+```
+
+#### 3. File Uploads Helper
+Never access `$_FILES` directly. Use:
+```php
+$file = $this->request->file('avatar'); // Retrieves file array
+$allFiles = $this->request->getFiles();
+
+// Upload path configured in config/config.php
+$uploadDir = Application::$app->config['storage']['uploads'];
+```
+
+---
 
 ### QueryBuilder
 
