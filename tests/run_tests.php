@@ -74,7 +74,23 @@ function assert_throws(string $exceptionClass, callable $callback, string $messa
 }
 
 // 3. Autoload & Bootstrap Spartan
-require_once __DIR__ . '/../vendor/autoload.php';
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    spl_autoload_register(function (string $class): void {
+        $prefix = 'App\\';
+        $baseDir = __DIR__ . '/../src/';
+        $len = strlen($prefix);
+        if (strncmp($prefix, $class, $len) !== 0) {
+            return;
+        }
+        $relativeClass = substr($class, $len);
+        $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
+        if (file_exists($file)) {
+            require_once $file;
+        }
+    });
+}
 require_once __DIR__ . '/../src/Core/Application.php';
 require_once __DIR__ . '/../src/Core/Database.php';
 require_once __DIR__ . '/../src/Core/Container.php';

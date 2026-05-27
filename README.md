@@ -69,7 +69,10 @@ DB_PASSWORD=
 # Built-in PHP server
 php -S localhost:8000 -t public
 
-# Or with Composer autoloader (recommended)
+# With native built-in autoloader (Zero-dependency)
+php -S localhost:8000 -t public
+
+# Or with Composer autoloader (optional)
 composer dump-autoload
 php -S localhost:8000 -t public
 ```
@@ -202,7 +205,7 @@ class DashboardController extends Controller {
 ```
 Behind the scenes:
 - **Native PHP Views (`.php`)**: The framework extracts the associative array into local variables using PHP's `extract()` function inside the `View` object's execution context. You print them using `$this->escape($title)` or `<?= $this->escape($title) ?>`.
-- **BladeOne Views (`.blade.php`)**: The framework delegates the compilation to the BladeOne compiler, which compiles Blade directives. You print variables using `{{ $title }}` (which is escaped by default) or `{!! $title !!}` (for raw, unescaped HTML).
+- **Blade Views (`.blade.php`)**: The framework compiles Blade directives natively using a regex-based compiler (extracted from the spirit of BladeOne). You print variables using `{{ $title }}` (which is escaped by default) or `{!! $title !!}` (for raw, unescaped HTML).
 
 #### 2. Hybrid Render Methods
 * **`render($view, $data)`**: Compiles the template and wraps it inside a main layout (e.g. `layouts/main_blade.blade.php`), yielding the template content inside the `@yield('content')` block.

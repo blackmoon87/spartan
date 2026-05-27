@@ -5,6 +5,7 @@ You are assisting a developer in a custom, lightweight, modern PHP MVC boilerpla
 > [!IMPORTANT]
 > **CRITICAL RULE FOR AI CODE GENERATION:**
 > Never code based on generic framework assumptions (such as Laravel, Symfony, or Yii defaults). You MUST strictly adhere to the custom Spartan API.
+> - **Zero-Dependency Core (Optional vendor/)**: The core framework is designed to run 100% on native PHP with a custom built-in autoloader. However, external composer packages are fully supported and can be utilized or recommended if a feature or test specifically requires specialized external libraries.
 > - **No Generic Helpers**: Do NOT use helper functions like `view()`, `request()`, `response()`, `redirect()`, `session()`, `env()`, or `config()` unless they are explicitly defined in Spartan's core.
 > - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions.
 > - **No Native Redirects/Headers**: Never call `header("Location: ...")` or `http_response_code()`. Always route redirects and status codes through the `Response` object.
@@ -440,17 +441,18 @@ When the developer requests a new feature (e.g. "Add a blog detail page"), follo
 3. **Create/Update Model**: If database integration is required, create the model in `src/Models/`. Use `$this->table()->...` — never raw SQL.
 4. **Create Service** (if needed): For complex multi-step logic, create a `src/Services/MyService.php`. Register it in the Container.
 5. **Create Controller Action**: Fetch inputs via `$this->request`, resolve services via `$this->make()`, query Models, dispatch events via `$this->event()`, return rendered view or JSON.
-6. **Create View Template**: Create `.blade.php` in `src/Views/` to use BladeOne syntax (supports `@csrf`, `@flash`, `@escape`, and `{{ $var }}` auto-escaping), or `.php` to write native PHP templates (requires manual `$this->escape()` and `<?= $this->csrfToken() ?>`).
+6. **Create View Template**: Create `.blade.php` in `src/Views/` to use the built-in native Blade compiler (supports `@csrf`, `@flash`, `@escape`, and `{{ $var }}` auto-escaping), or `.php` to write native PHP templates (requires manual `$this->escape()` and `<?= $this->csrfToken() ?>`).
 7. **Cache where applicable**: Wrap expensive database reads in `Cache::remember()` with a sensible TTL.
 
 ---
 
 ## 5. Views & Frontend Standards (V)
 
-- **Preferred Template Format**: Always prioritize using BladeOne templates (`.blade.php`) over native PHP templates (`.php`) for any new user interfaces or pages. Native PHP templates are maintained strictly as fallback.
+- **Native Blade Engine**: The Blade rendering engine is implemented natively inside the core (`src/Core/View.php`), extracted from the spirit of the previous BladeOne library to maintain complete syntax compatibility. It uses regex compilation and recursive PCRE patterns to support layout inheritance, section buffering, loops, conditional evaluations, and partial includes without requiring any external dependencies (like eftec/bladeone).
+- **Preferred Template Format**: Always prioritize using Blade templates (`.blade.php`) over native PHP templates (`.php`) for any new user interfaces or pages. Native PHP templates are maintained strictly as fallback.
 - **Strict Layout Inheritance**: All Blade views that serve complete pages MUST extend a base layout using `@extends('layouts.main_blade')` (or equivalent) and define content blocks inside `@section('content')` and `@endsection`.
 - **Zero Raw Echoes**: Never use raw echoes (`<?= $var ?>`, `echo`, or `{!! $var !!}`) inside templates unless the variable is specifically marked as safe HTML. For everything else:
-  - In Blade, use double curly braces `{{ $var }}` (which automatically runs HTML escaping via BladeOne) or `@escape($var)`.
+  - In Blade, use double curly braces `{{ $var }}` (which automatically runs HTML escaping via the built-in compiler) or `@escape($var)`.
   - In native PHP templates, use `$this->escape($var)`.
 - **Form Safety**: Every single HTML `<form>` that makes a POST request MUST include the CSRF protection directive:
   - `@csrf` in Blade templates.

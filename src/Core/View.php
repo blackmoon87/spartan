@@ -8,7 +8,9 @@ class View
 {
     private string $layout = 'main';
     private string $viewsPath;
-    private ?\eftec\bladeone\BladeOne $blade = null;
+    private array $sections = [];
+    private ?string $activeSection = null;
+    private ?string $extendedLayout = null;
 
     public function __construct(?string $viewsPath = null)
     {
@@ -41,7 +43,6 @@ class View
 
     /**
      * Render the view merged with the layout content.
-     * Params are passed raw but must always be output via $this->escape() in templates.
      */
     public function render(string $view, array $params = []): string
     {
@@ -53,7 +54,19 @@ class View
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
         if (file_exists($bladeFile)) {
-            return $this->getBlade()->run($view, $params);
+            $compiledFile = $this->compile($view);
+            
+            $this->extendedLayout = null;
+            $this->sections = [];
+            
+            $viewContent = $this->renderCompiled($compiledFile, $params);
+            
+            if ($this->extendedLayout !== null) {
+                $layoutCompiled = $this->compile($this->extendedLayout);
+                return $this->renderCompiled($layoutCompiled, $params);
+            }
+            
+            return $viewContent;
         }
 
         $viewContent = $this->renderOnlyView($view, $params);
@@ -63,7 +76,6 @@ class View
 
     /**
      * Render only the view template content without wrapping it in a layout.
-     * Useful for HTMX / AJAX partial responses.
      */
     public function renderViewOnly(string $view, array $params = []): string
     {
@@ -75,40 +87,139 @@ class View
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
         if (file_exists($bladeFile)) {
-            return $this->getBlade()->run($view, $params);
+            $compiledFile = $this->compile($view);
+            
+            $this->extendedLayout = null;
+            $this->sections = [];
+            
+            $viewContent = $this->renderCompiled($compiledFile, $params);
+            
+            if ($this->extendedLayout !== null) {
+                $layoutCompiled = $this->compile($this->extendedLayout);
+                return $this->renderCompiled($layoutCompiled, $params);
+            }
+            
+            return $viewContent;
         }
 
         return $this->renderOnlyView($view, $params);
     }
 
     /**
-     * Lazily initialize BladeOne instance with custom directive extensions.
+     * Compile a Blade template.
      */
-    protected function getBlade(): \eftec\bladeone\BladeOne
+    protected function compile(string $view): string
     {
-        if ($this->blade === null) {
-            $cachePath = dirname(dirname(__DIR__)) . '/storage/views';
-            $mode = \eftec\bladeone\BladeOne::MODE_AUTO;
-            $this->blade = new \eftec\bladeone\BladeOne(
-                $this->viewsPath,
-                $cachePath,
-                $mode
-            );
-
-            // Register custom Blade directives mapping to core methods
-            $this->blade->directive('csrf', function() {
-                return '<?php echo \App\Core\Application::$app->view->csrfToken(); ?>';
-            });
-
-            $this->blade->directive('flash', function($expression) {
-                return '<?php echo \App\Core\Application::$app->view->flash(' . $expression . '); ?>';
-            });
-
-            $this->blade->directive('escape', function($expression) {
-                return '<?php echo \App\Core\Application::$app->view->escape(' . $expression . '); ?>';
-            });
+        $viewFile = str_replace('.', '/', $view);
+        $sourcePath = $this->viewsPath . "/{$viewFile}.blade.php";
+        if (!file_exists($sourcePath)) {
+            throw new \InvalidArgumentException("Blade template not found [{$view}]");
         }
-        return $this->blade;
+
+        $cacheDir = dirname(dirname(__DIR__)) . '/storage/views';
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir, 0755, true);
+        }
+
+        $compiledPath = $cacheDir . '/' . md5($view) . '.php';
+
+        $debugMode = getenv('APP_DEBUG') === 'true' || ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
+
+        if (!file_exists($compiledPath) || $debugMode || filemtime($sourcePath) > filemtime($compiledPath)) {
+            $content = file_get_contents($sourcePath);
+            $compiledContent = $this->compileString($content);
+            file_put_contents($compiledPath, $compiledContent);
+        }
+
+        return $compiledPath;
+    }
+
+    /**
+     * Translate Blade directives to PHP.
+     */
+    protected function compileString(string $content): string
+    {
+        $content = preg_replace('/\{\{\s*(.+?)\s*\}\}/s', '<?php echo htmlspecialchars(($1) ?? \'\', ENT_QUOTES, \'UTF-8\'); ?>', $content);
+        $content = preg_replace('/\{!!\s*(.+?)\s*!!\}/s', '<?php echo $1; ?>', $content);
+        $content = preg_replace('/@extends\s*\((.*?)\)/', '<?php $this->extend($1); ?>', $content);
+        $content = preg_replace('/@section\s*\((.*?)\)/', '<?php $this->startSection($1); ?>', $content);
+        $content = preg_replace('/@endsection/', '<?php $this->endSection(); ?>', $content);
+        $content = preg_replace('/@yield\s*\((.*?)\)/', '<?php echo $this->yieldContent($1); ?>', $content);
+        $content = preg_replace('/@include\s*\((.*?)\)/', '<?php echo $this->include($1, get_defined_vars()); ?>', $content);
+        $content = preg_replace('/@csrf/', '<?php echo $this->csrfToken(); ?>', $content);
+        
+        $content = preg_replace('/@flash\s*(\((?>[^()]+|(?1))*\))/', '<?php echo $this->flash$1; ?>', $content);
+        $content = preg_replace('/@escape\s*(\((?>[^()]+|(?1))*\))/', '<?php echo $this->escape$1; ?>', $content);
+        
+        $content = preg_replace('/@if\s*(\((?>[^()]+|(?1))*\))/', '<?php if$1: ?>', $content);
+        $content = preg_replace('/@elseif\s*(\((?>[^()]+|(?1))*\))/', '<?php elseif$1: ?>', $content);
+        $content = preg_replace('/@else/', '<?php else: ?>', $content);
+        $content = preg_replace('/@endif/', '<?php endif; ?>', $content);
+
+        $content = preg_replace('/@foreach\s*(\((?>[^()]+|(?1))*\))/', '<?php foreach$1: ?>', $content);
+        $content = preg_replace('/@endforeach/', '<?php endforeach; ?>', $content);
+
+        $content = preg_replace('/@for\s*(\((?>[^()]+|(?1))*\))/', '<?php for$1: ?>', $content);
+        $content = preg_replace('/@endfor/', '<?php endfor; ?>', $content);
+
+        $content = preg_replace('/@while\s*(\((?>[^()]+|(?1))*\))/', '<?php while$1: ?>', $content);
+        $content = preg_replace('/@endwhile/', '<?php endwhile; ?>', $content);
+
+        $content = preg_replace('/@empty\s*(\((?>[^()]+|(?1))*\))/', '<?php if(empty$1): ?>', $content);
+        $content = preg_replace('/@endempty/', '<?php endif; ?>', $content);
+
+        return $content;
+    }
+
+    /**
+     * Run compiled template inside local Closure.
+     */
+    protected function renderCompiled(string $compiledFile, array $params): string
+    {
+        $renderer = \Closure::bind(function() use ($compiledFile, $params) {
+            extract($params, EXTR_SKIP);
+            ob_start();
+            require $compiledFile;
+            return (string) ob_get_clean();
+        }, $this, static::class);
+
+        return $renderer();
+    }
+
+    /**
+     * Section layout helpers.
+     */
+    public function extend(string $layout): void
+    {
+        $this->extendedLayout = trim($layout, '\'"');
+    }
+
+    public function startSection(string $name): void
+    {
+        $this->activeSection = trim($name, '\'"');
+        ob_start();
+    }
+
+    public function endSection(): void
+    {
+        if ($this->activeSection === null) {
+            return;
+        }
+        $this->sections[$this->activeSection] = ob_get_clean();
+        $this->activeSection = null;
+    }
+
+    public function yieldContent(string $name): string
+    {
+        $name = trim($name, '\'"');
+        return $this->sections[$name] ?? '';
+    }
+
+    public function include(string $view, array $params = [], array $localVars = []): string
+    {
+        $view = trim($view, '\'"');
+        unset($localVars['this']);
+        return $this->renderViewOnly($view, array_merge($localVars, $params));
     }
 
     /**
@@ -141,17 +252,15 @@ class View
      */
     public function flash(string $key, ?string $default = null): ?string
     {
+        $key = trim($key, '\'"');
         return Application::$app->session->getFlash($key, $default);
     }
 
     /**
      * Load layout contents.
-     * Variables are injected as-is; all output inside layout files
-     * MUST go through $this->escape() to prevent XSS.
      */
     protected function layoutContent(array $params = []): string
     {
-        // Bind $this to the view scope so layout files can call $this->escape(), $this->flash() etc.
         $renderer = \Closure::bind(function() use ($params) {
             extract($params, EXTR_SKIP);
             $layoutPath = $this->viewsPath . "/layouts/{$this->layout}.php";
@@ -168,13 +277,9 @@ class View
 
     /**
      * Load page-specific view contents.
-     * Variables are injected as-is; all output inside view files
-     * MUST go through $this->escape() to prevent XSS.
      */
     protected function renderOnlyView(string $view, array $params): string
     {
-        // Guard: only allow safe view names (alphanumeric, underscores, slashes for subfolders)
-        // Blocks path traversal attempts like '../../config/config'
         if (!preg_match('#^[a-zA-Z0-9_/]+$#', $view)) {
             throw new \InvalidArgumentException(
                 "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
@@ -185,7 +290,6 @@ class View
             extract($params, EXTR_SKIP);
             $viewPath = $this->viewsPath . "/{$view}.php";
 
-            // Secondary guard: resolved path must stay inside the Views directory
             $viewsBase = realpath($this->viewsPath);
             $resolvedPath = realpath($viewPath);
             if ($resolvedPath === false || $viewsBase === false || !str_starts_with($resolvedPath, $viewsBase)) {
