@@ -278,7 +278,7 @@ class View
      */
     public function csrfToken(): string
     {
-        $token = Application::$app->session->get('_csrf_token') ?? '';
+        $token = isset(Application::$app) ? (Application::$app->session->get('_csrf_token') ?? '') : '';
         return '<input type="hidden" name="_csrf" value="' . $token . '">';
     }
 
@@ -287,7 +287,7 @@ class View
      */
     public function csrfTokenValue(): string
     {
-        return Application::$app->session->get('_csrf_token') ?? '';
+        return isset(Application::$app) ? (Application::$app->session->get('_csrf_token') ?? '') : '';
     }
 
     /**
@@ -304,7 +304,7 @@ class View
     public function flash(string $key, ?string $default = null): ?string
     {
         $key = trim($key, '\'"');
-        return Application::$app->session->getFlash($key, $default);
+        return isset(Application::$app) ? Application::$app->session->getFlash($key, $default) : $default;
     }
 
     /**
