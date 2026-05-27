@@ -10,16 +10,19 @@ A hand-crafted PHP 8.1+ MVC framework built for developers who want to understan
 
 | Layer | Capability |
 |---|---|
-| **Router** | GET / POST / PUT / PATCH / DELETE + HTML form method spoofing & middleware groups |
+| **Router** | GET / POST / PUT / PATCH / DELETE + HTML form method spoofing, middleware groups & FormRequest injection |
 | **Request** | Auto JSON body parsing, file upload helpers, header resolver, client IP resolver |
 | **Rate Limiter** | Parameterized rate limiting middleware (`rate_limit:100,60`) with Client IP tracking |
-| **QueryBuilder** | Fluent, fully parameterized — no raw SQL. Write guards on `update()` / `delete()` |
+| **QueryBuilder** | Fluent, fully parameterized — no raw SQL. Write guards on `update()` / `delete()`, driver-aware dialects |
 | **Model Relationships** | `hasMany`, `hasOne`, `belongsTo` + eager loading (no N+1) |
 | **Async Job Queue** | DB-backed queue with retry + exponential backoff |
 | **DI Container** | Auto-resolution via Reflection + singleton / factory / instance bindings |
 | **Cache** | File or Redis driver — `Cache::remember()` pattern |
 | **Events** | Synchronous and async listeners — side effects stay out of controllers |
 | **Validator** | `required`, `email`, `unique`, `regex`, `nullable`, `confirmed`, `min`, `max`, `in` |
+| **Logger** | PSR-3 daily rotated file logger (`storage/logs/app-YYYY-MM-DD.log`) with interpolation |
+| **SQL Dialects** | Driver-aware SQL identifier quote compiling (MySQL backticks vs SQLite double quotes) |
+| **FormRequests** | Abstract request base with auto-injection and auto-validation in controller methods |
 | **Session** | HttpOnly + SameSite=Lax + Secure (auto-detect) + CSRF generation |
 | **View** | Layout + template rendering with double path-traversal guard |
 | **Security** | CSRF (form/AJAX/JSON), XSS escape, open redirect guard, security headers middleware |
@@ -343,6 +346,71 @@ $v = $this->validate($this->request->getBody(), [
 
 if ($v->fails()) {
     return $this->render('register', ['errors' => $v->errors()]);
+}
+```
+
+### Daily Logger (PSR-3)
+
+```php
+use App\Core\Application;
+
+// Log informative message with placeholder injection
+Application::$app->logger->info("User {username} performed an action", [
+    'username' => 'john_doe'
+]);
+
+// Logs go to: storage/logs/app-YYYY-MM-DD.log
+// Uncaught exceptions are automatically logged with traces by ExceptionHandler.
+```
+
+### SQL Dialects
+
+The `QueryBuilder` automatically compiles queries with quotes appropriate to the active driver:
+- **MySQL**: Compiles table/column names using backticks:
+  ```sql
+  SELECT `id`, `name` FROM `users` WHERE `active` = 1
+  ```
+- **SQLite**: Compiles table/column names using double quotes:
+  ```sql
+  SELECT "id", "name" FROM "users" WHERE "active" = 1
+  ```
+
+### FormRequests
+
+Encapsulate your validation and authorization logic into dedicated Request objects:
+
+```php
+namespace App\Controllers\Requests;
+
+use App\Core\FormRequest;
+
+class StorePostRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->session->get('role') === 'admin';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'title' => 'required|string|min:5|max:100',
+            'body'  => 'required|string',
+        ];
+    }
+}
+```
+
+Type-hint the FormRequest in your controller action, and the Router will automatically validate and inject it:
+
+```php
+public function store(StorePostRequest $request)
+{
+    // Execution only reaches here if validation and authorization pass.
+    $validatedData = $request->getBody();
+    
+    (new Post)->create($validatedData);
+    return $this->redirect('/posts');
 }
 ```
 
