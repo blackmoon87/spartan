@@ -53,8 +53,9 @@ Follow these specifications and structural rules when writing, refactoring, or g
 │   ├── Models/             # App Models (Extend App\Core\Model)
 │   ├── Services/           # Business logic services (no extends required)
 │   └── Views/              # View templates
-│       ├── layouts/        # Layout wrappers (main.php)
-│       └── [view].php      # Page templates
+│       ├── layouts/        # Layout wrappers (main_blade.blade.php, main.php)
+│       ├── [view].blade.php # Blade template (Preferred)
+│       └── [view].php      # Native PHP template (Fallback)
 ├── storage/
 │   └── cache/              # File cache storage (auto-created)
 ├── .env                    # Environment variables
@@ -441,3 +442,21 @@ When the developer requests a new feature (e.g. "Add a blog detail page"), follo
 5. **Create Controller Action**: Fetch inputs via `$this->request`, resolve services via `$this->make()`, query Models, dispatch events via `$this->event()`, return rendered view or JSON.
 6. **Create View Template**: Create `.blade.php` in `src/Views/` to use BladeOne syntax (supports `@csrf`, `@flash`, `@escape`, and `{{ $var }}` auto-escaping), or `.php` to write native PHP templates (requires manual `$this->escape()` and `<?= $this->csrfToken() ?>`).
 7. **Cache where applicable**: Wrap expensive database reads in `Cache::remember()` with a sensible TTL.
+
+---
+
+## 5. Views & Frontend Standards (V)
+
+- **Preferred Template Format**: Always prioritize using BladeOne templates (`.blade.php`) over native PHP templates (`.php`) for any new user interfaces or pages. Native PHP templates are maintained strictly as fallback.
+- **Strict Layout Inheritance**: All Blade views that serve complete pages MUST extend a base layout using `@extends('layouts.main_blade')` (or equivalent) and define content blocks inside `@section('content')` and `@endsection`.
+- **Zero Raw Echoes**: Never use raw echoes (`<?= $var ?>`, `echo`, or `{!! $var !!}`) inside templates unless the variable is specifically marked as safe HTML. For everything else:
+  - In Blade, use double curly braces `{{ $var }}` (which automatically runs HTML escaping via BladeOne) or `@escape($var)`.
+  - In native PHP templates, use `$this->escape($var)`.
+- **Form Safety**: Every single HTML `<form>` that makes a POST request MUST include the CSRF protection directive:
+  - `@csrf` in Blade templates.
+  - `<?= $this->csrfToken() ?>` in native PHP templates.
+- **HTMX Partial Swaps**: Any route/controller action triggered by HTMX (e.g. `hx-get`, `hx-post`) that expects a targeted swap inside a page container MUST return ONLY the partial HTML code.
+  - The controller MUST return the view using `$this->renderViewOnly('template_name', $data)`.
+  - Never return a full layout page for HTMX swaps, as it duplicates headers/scripts and breaks the DOM.
+- **Alpine.js for Client State**: Keep JavaScript in templates minimal. Use Alpine.js (`x-data`, `x-init`, `x-model`, `x-on`) for interactive client-side components (like toggle menus, counters, notifications, and client calculations). Avoid inline raw jQuery or heavy vanilla `<script>` tags.
+
