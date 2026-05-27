@@ -74,6 +74,7 @@ function assert_throws(string $exceptionClass, callable $callback, string $messa
 }
 
 // 3. Autoload & Bootstrap Spartan
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Core/Application.php';
 require_once __DIR__ . '/../src/Core/Database.php';
 require_once __DIR__ . '/../src/Core/Container.php';
@@ -770,6 +771,26 @@ simulate_mvc_request('POST', "/order/{$orderId}", [
 assert_equals('/', $mockResponse->redirectUrl, "MVC DELETE redirects properly");
 $deletedOrder = $orderModel->find($orderId);
 assert_true($deletedOrder === null, "MVC DELETE successfully removes record from database");
+
+// 6. Blade & HTMX Integration: Test GET /search and POST /search/query
+(new \Tests\Sample\Models\User())->create([
+    'name'  => 'Searchable User',
+    'email' => 'search@example.com'
+]);
+
+$searchPageHtml = simulate_mvc_request('GET', '/search');
+assert_true(str_contains($searchPageHtml, 'Customer Directory Search'), "Blade template renders sections correctly");
+assert_true(str_contains($searchPageHtml, 'SPARTAN + BLADE + HTMX'), "Blade template inherits layout structures (@extends)");
+assert_true(str_contains($searchPageHtml, 'hx-post="/search/query"'), "Blade templates support HTMX tags");
+
+// Simulate POST search request
+$searchResultsHtml = simulate_mvc_request('POST', '/search/query', [
+    'query' => 'Searchable',
+    '_csrf' => $csrfToken
+]);
+assert_true(str_contains($searchResultsHtml, 'Searchable User'), "HTMX searchQuery controller renders matching query results");
+assert_true(str_contains($searchResultsHtml, 'search@example.com'), "HTMX searchQuery renders values cleanly");
+assert_true(!str_contains($searchResultsHtml, 'SPARTAN + BLADE + HTMX'), "renderViewOnly compiles without layouts");
 
 // Restore original response object
 $app->response = $originalResponse;

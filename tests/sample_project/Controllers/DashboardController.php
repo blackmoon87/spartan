@@ -189,4 +189,36 @@ class DashboardController extends Controller
         // Open Redirect Mitigation will block external domains and fall back to '/'
         $this->redirect($target);
     }
+
+    /**
+     * Display the Blade & HTMX interactive search page.
+     */
+    public function searchPage(): string
+    {
+        return $this->render('search');
+    }
+
+    /**
+     * Handle the live HTMX search query.
+     * Returns only the search results partial Blade view.
+     */
+    public function searchQuery(): string
+    {
+        $query = $this->request->post('query', '');
+        
+        $userModel = new User();
+        
+        if (trim($query) === '') {
+            $users = [];
+        } else {
+            $users = $userModel->table()
+                ->where('name', '%' . $query . '%', 'LIKE')
+                ->orWhere('email', '%' . $query . '%', 'LIKE')
+                ->get();
+        }
+
+        return $this->renderViewOnly('search_results', [
+            'users' => $users
+        ]);
+    }
 }

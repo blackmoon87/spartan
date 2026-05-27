@@ -8,6 +8,7 @@ class View
 {
     private string $layout = 'main';
     private string $viewsPath;
+    private ?\eftec\bladeone\BladeOne $blade = null;
 
     public function __construct(?string $viewsPath = null)
     {
@@ -44,9 +45,70 @@ class View
      */
     public function render(string $view, array $params = []): string
     {
+        if (!preg_match('#^[a-zA-Z0-9_/]+$#', $view)) {
+            throw new \InvalidArgumentException(
+                "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
+            );
+        }
+
+        $bladeFile = $this->viewsPath . "/{$view}.blade.php";
+        if (file_exists($bladeFile)) {
+            return $this->getBlade()->run($view, $params);
+        }
+
         $viewContent = $this->renderOnlyView($view, $params);
         $layoutContent = $this->layoutContent($params);
         return str_replace('{{content}}', $viewContent, $layoutContent);
+    }
+
+    /**
+     * Render only the view template content without wrapping it in a layout.
+     * Useful for HTMX / AJAX partial responses.
+     */
+    public function renderViewOnly(string $view, array $params = []): string
+    {
+        if (!preg_match('#^[a-zA-Z0-9_/]+$#', $view)) {
+            throw new \InvalidArgumentException(
+                "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
+            );
+        }
+
+        $bladeFile = $this->viewsPath . "/{$view}.blade.php";
+        if (file_exists($bladeFile)) {
+            return $this->getBlade()->run($view, $params);
+        }
+
+        return $this->renderOnlyView($view, $params);
+    }
+
+    /**
+     * Lazily initialize BladeOne instance with custom directive extensions.
+     */
+    protected function getBlade(): \eftec\bladeone\BladeOne
+    {
+        if ($this->blade === null) {
+            $cachePath = dirname(dirname(__DIR__)) . '/storage/views';
+            $mode = \eftec\bladeone\BladeOne::MODE_AUTO;
+            $this->blade = new \eftec\bladeone\BladeOne(
+                $this->viewsPath,
+                $cachePath,
+                $mode
+            );
+
+            // Register custom Blade directives mapping to core methods
+            $this->blade->directive('csrf', function() {
+                return '<?php echo \App\Core\Application::$app->view->csrfToken(); ?>';
+            });
+
+            $this->blade->directive('flash', function($expression) {
+                return '<?php echo \App\Core\Application::$app->view->flash(' . $expression . '); ?>';
+            });
+
+            $this->blade->directive('escape', function($expression) {
+                return '<?php echo \App\Core\Application::$app->view->escape(' . $expression . '); ?>';
+            });
+        }
+        return $this->blade;
     }
 
     /**

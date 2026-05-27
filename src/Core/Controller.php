@@ -34,6 +34,15 @@ abstract class Controller
     }
 
     /**
+     * Render only the view template content without wrapping it in a layout.
+     * Useful for HTMX / AJAX partial responses.
+     */
+    public function renderViewOnly(string $view, array $params = []): string
+    {
+        return Application::$app->view->renderViewOnly($view, $params);
+    }
+
+    /**
      * Shortcut: redirect the client to a URL.
      */
     public function redirect(string $url): void
