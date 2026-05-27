@@ -11,46 +11,59 @@
         <!-- Left Side: Post Detail & Comments list -->
         <div>
             <div class="card" style="padding: 2.5rem;">
-                <h1 style="font-size: 2.2rem; font-weight: 800; margin-bottom: 1rem; line-height: 1.2;">{{ $post->title }}</h1>
-                <p style="font-size: 1.1rem; color: var(--text-primary); white-space: pre-line;">{{ $post->body }}</p>
+                <h1 style="font-size: 2.2rem; font-weight: 800; margin-bottom: 1rem; line-height: 1.2; color: #f3f4f6;">{{ $post->title }}</h1>
+                <p style="font-size: 1.1rem; color: #d1d5db; white-space: pre-line; line-height: 1.7;">{{ $post->body }}</p>
             </div>
 
             <div class="card">
-                <h2>Comments ({{ count($comments) }})</h2>
+                <h2 style="font-size: 1.4rem; margin-bottom: 1rem; color: #f3f4f6;">Comments ({{ count($comments) }})</h2>
                 <div id="comments-section">
                     @if (count($comments) > 0)
                         @foreach ($comments as $comment)
-                            <div class="post-item" style="border-bottom: 1px solid var(--border-color); padding: 1.2rem 0;">
-                                <p style="color: var(--text-primary); margin-bottom: 0.4rem;">{{ $comment['content'] }}</p>
-                                <small style="color: var(--text-secondary); font-weight: 500;">By: <strong style="color: var(--text-primary);">{{ $comment['author']['name'] ?? 'Guest' }}</strong></small>
+                            <div class="post-item" style="border-bottom: 1px solid var(--border-color); padding: 1.2rem 0; margin-bottom: 0;">
+                                <p style="color: #e5e7eb; margin-bottom: 0.5rem; line-height: 1.5;">{{ $comment['content'] }}</p>
+                                <small style="color: var(--text-secondary); font-weight: 500;">By: <strong style="color: #f3f4f6;">{{ $comment['author']['name'] ?? 'Guest' }}</strong></small>
                             </div>
                         @endforeach
                     @else
-                        <p style="color: var(--text-secondary); font-size: 0.95rem;">No comments yet. Be the first to leave one below!</p>
+                        <p style="color: var(--text-secondary); font-size: 0.95rem;">No comments yet. Be the first to leave one!</p>
                     @endif
                 </div>
             </div>
         </div>
 
-        <!-- Right Side: Comment Form -->
+        <!-- Right Side: Comment Action -->
         <div>
-            <div class="card">
-                <h2>Leave a Comment</h2>
-                <form method="POST" action="{{ url('/post/' . $post->id . '/comment') }}">
-                    @csrf
-                    <label>Select Your Author Profile</label>
-                    <select name="user_id" required>
-                        <option value="">Choose registered user...</option>
-                        @foreach ($users as $u)
-                            <option value="{{ $u['id'] }}">{{ $u['name'] }} (ID: {{ $u['id'] }})</option>
-                        @endforeach
-                    </select>
-
-                    <label>Your Comment</label>
-                    <textarea name="content" required rows="5" placeholder="Share your thoughts..."></textarea>
-                    <button type="submit">Submit Comment</button>
-                </form>
-            </div>
+            @if (\App\Core\Application::$app->session->get('user_id'))
+                <div class="card">
+                    <h2 style="font-size: 1.4rem; margin-bottom: 0.5rem; color: #f3f4f6;">Leave a Comment</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Commenting as <strong>{{ \App\Core\Application::$app->session->get('user_name') }}</strong>.</p>
+                    
+                    <form method="POST" action="{{ url('/post/' . $post->id . '/comment') }}">
+                        @csrf
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Your Comment</label>
+                            <textarea name="content" required rows="5" placeholder="Share your thoughts..." style="width: 100%; box-sizing: border-box; resize: vertical;"></textarea>
+                        </div>
+                        <button type="submit" style="width: 100%; padding: 0.75rem; font-weight: 600; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; cursor: pointer; transition: all 0.2s;">
+                            Submit Comment
+                        </button>
+                    </form>
+                </div>
+            @else
+                <div class="card" style="text-align: center; border: 1px dashed rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.02);">
+                    <h2 style="font-size: 1.4rem; margin-bottom: 0.75rem; color: #f3f4f6;">Join Discussion</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem;">Please log in or register to join the conversation and leave a comment on this post.</p>
+                    <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                        <a href="{{ url('/login') }}" style="display: inline-block; padding: 0.6rem 1.2rem; font-weight: 600; background: #3b82f6; color: #ffffff; border-radius: 6px; text-decoration: none; font-size: 0.9rem;">
+                            Log In
+                        </a>
+                        <a href="{{ url('/register') }}" style="display: inline-block; padding: 0.6rem 1.2rem; font-weight: 600; background: rgba(255, 255, 255, 0.08); color: #f3f4f6; border-radius: 6px; text-decoration: none; font-size: 0.9rem;">
+                            Sign Up
+                        </a>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 @endsection

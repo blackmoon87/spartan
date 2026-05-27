@@ -64,12 +64,28 @@ $app->view->setViewsPath(dirname(__DIR__) . '/Views');
 // Auto-migration check: Create sample tables if they do not exist
 if ($app->db !== null) {
     try {
+        // Drop tables if password column is missing to force migration update
+        $schemaUpdated = false;
+        try {
+            $app->db->query("SELECT password FROM test_users LIMIT 1");
+            $schemaUpdated = true;
+        } catch (\Throwable $e) {
+            // Password column is missing
+        }
+
+        if (!$schemaUpdated) {
+            $app->db->exec("DROP TABLE IF EXISTS blogger_comments;");
+            $app->db->exec("DROP TABLE IF EXISTS blogger_posts;");
+            $app->db->exec("DROP TABLE IF EXISTS test_users;");
+        }
+
         $driver = $app->db->getAttribute(PDO::ATTR_DRIVER_NAME);
         if ($driver === 'sqlite') {
             $app->db->exec("CREATE TABLE IF NOT EXISTS test_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL DEFAULT '',
                 created_at TEXT NULL,
                 updated_at TEXT NULL
             );");
@@ -98,6 +114,7 @@ if ($app->db !== null) {
                 `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 `name` VARCHAR(255) NOT NULL,
                 `email` VARCHAR(255) UNIQUE NOT NULL,
+                `password` VARCHAR(255) NOT NULL DEFAULT '',
                 `created_at` DATETIME NULL,
                 `updated_at` DATETIME NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
@@ -127,8 +144,9 @@ if ($app->db !== null) {
         $authorId = null;
         $now = date('Y-m-d H:i:s');
         if ($userCount === 0) {
-            $stmt = $app->db->prepare("INSERT INTO test_users (name, email, created_at, updated_at) VALUES (?, ?, ?, ?)");
-            $stmt->execute(['Sample Author', 'author@mail.com', $now, $now]);
+            $stmt = $app->db->prepare("INSERT INTO test_users (name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
+            $hashedPassword = password_hash('password123', PASSWORD_BCRYPT);
+            $stmt->execute(['Sample Author', 'author@mail.com', $hashedPassword, $now, $now]);
             $authorId = $app->db->lastInsertId();
         } else {
             $authorId = $app->db->query("SELECT id FROM test_users LIMIT 1")->fetchColumn();

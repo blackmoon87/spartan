@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Tests\Sample\Controllers\BloggerController;
+use Tests\Sample\Controllers\AuthController;
 
 /** @var \App\Core\Application $app */
 
@@ -15,3 +16,10 @@ $app->router->delete('/post/{id}', [BloggerController::class, 'destroyPost']);
 $app->router->post('/post/{id}/comment', [BloggerController::class, 'storeComment']);
 $app->router->get('/redirect-test', [BloggerController::class, 'redirectTest']);
 $app->router->post('/search/posts', [BloggerController::class, 'searchPosts']);
+
+// Authentication Routes
+$app->router->get('/login', [AuthController::class, 'login']);
+$app->router->post('/login', [AuthController::class, 'postLogin']);
+$app->router->get('/register', [AuthController::class, 'register']);
+$app->router->post('/register', [AuthController::class, 'postRegister']);
+$app->router->post('/logout', [AuthController::class, 'logout']);

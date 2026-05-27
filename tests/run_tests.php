@@ -223,6 +223,7 @@ try {
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(255) NOT NULL,
         `email` VARCHAR(255) UNIQUE NOT NULL,
+        `password` VARCHAR(255) NOT NULL DEFAULT '',
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
@@ -371,7 +372,7 @@ assert_true($validator->validate(['code' => 'ABC-123'], $rules4), "Validator acc
 assert_true(!$validator->validate(['code' => 'abc-123'], $rules4), "Validator rejects regex mismatch pattern");
 
 // Unique (requires test table insert)
-$app->db->exec("INSERT INTO `test_users` (name, email) VALUES ('Alex', 'alex@mail.com')");
+$app->db->exec("INSERT INTO `test_users` (name, email, password) VALUES ('Alex', 'alex@mail.com', 'password123')");
 $rules5 = ['email' => 'required|email|unique:test_users,email'];
 assert_true($validator->validate(['email' => 'bob@mail.com'], $rules5), "Validator unique rule accepts non-existing unique values");
 assert_true(!$validator->validate(['email' => 'alex@mail.com'], $rules5), "Validator unique rule rejects already existing unique values");
@@ -479,7 +480,7 @@ $orderModel = new TestOrder();
 $profileModel = new TestProfile();
 
 // Test Model Timestamps on create
-$newUserId = $userModel->create(['name' => 'Timestamps User', 'email' => 'time@mail.com']);
+$newUserId = $userModel->create(['name' => 'Timestamps User', 'email' => 'time@mail.com', 'password' => 'password123']);
 $createdUser = $userModel->find($newUserId);
 assert_true(!empty($createdUser['created_at']), "Model timestamp create() appends created_at values");
 assert_true(!empty($createdUser['updated_at']), "Model timestamp create() appends updated_at values");

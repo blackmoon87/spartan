@@ -12,16 +12,16 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <style>
         :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --accent: #38bdf8;
-            --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-            --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-            --border-color: #334155;
-            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --bg-primary: #0b0f19;
+            --bg-secondary: #131a2b;
+            --bg-tertiary: #1e2942;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent: #3b82f6;
+            --accent-gradient: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --transition: all 0.2s ease-in-out;
         }
 
         * {
@@ -39,62 +39,52 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 2rem 1.5rem;
+            padding: 1.5rem 1.5rem 3rem 1.5rem;
         }
 
-        header {
-            text-align: center;
-            margin-bottom: 3rem;
-            padding-bottom: 2rem;
+        /* Top Navigation Bar */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
             border-bottom: 1px solid var(--border-color);
+            margin-bottom: 2.5rem;
         }
 
-        header h1 {
-            font-size: 2.5rem;
+        .nav-logo {
             font-weight: 800;
+            font-size: 1.4rem;
             background: var(--accent-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-        }
-
-        header p {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-weight: 600;
+            text-decoration: none;
         }
 
         /* Success/Error Alerts */
         .alert {
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
             margin-bottom: 2rem;
             font-weight: 500;
-            animation: fadeIn 0.3s ease;
+            animation: fadeIn 0.25s ease;
         }
         .alert-success {
-            background-color: rgba(16, 185, 129, 0.15);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
             color: #34d399;
-        }
-        .alert-danger {
-            background-color: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #f87171;
         }
 
         /* Grid Layout */
         .layout-grid {
             display: grid;
             grid-template-columns: 7fr 5fr;
-            gap: 2.5rem;
+            gap: 2rem;
         }
 
-        @media (max-width: 968px) {
+        @media (max-width: 900px) {
             .layout-grid {
                 grid-template-columns: 1fr;
             }
@@ -103,64 +93,49 @@
         /* Card styles */
         .card {
             background-color: var(--bg-secondary);
-            border-radius: 16px;
-            padding: 2rem;
+            border-radius: 12px;
+            padding: 1.75rem;
             box-shadow: var(--card-shadow);
             border: 1px solid var(--border-color);
             margin-bottom: 1.5rem;
             transition: var(--transition);
         }
         .card:hover {
-            transform: translateY(-2px);
-            border-color: #475569;
-        }
-
-        .card h2, .card h3 {
-            font-weight: 700;
-            margin-bottom: 1.2rem;
-            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
         /* Inputs & Buttons */
         input[type="text"],
         input[type="email"],
-        input[type="number"],
+        input[type="password"],
         select,
         textarea {
             width: 100%;
-            padding: 0.8rem 1rem;
+            padding: 0.75rem 1rem;
             background-color: var(--bg-primary);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border-radius: 6px;
             color: var(--text-primary);
             font-family: inherit;
-            font-size: 1rem;
+            font-size: 0.95rem;
             margin-bottom: 1.2rem;
             transition: var(--transition);
         }
         input:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15);
         }
 
         button, .btn {
             display: inline-block;
             width: 100%;
-            padding: 0.8rem 1.5rem;
-            background: var(--accent-gradient);
+            padding: 0.75rem 1.25rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             color: white;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 600;
             cursor: pointer;
             transition: var(--transition);
@@ -168,14 +143,15 @@
             text-decoration: none;
         }
         button:hover, .btn:hover {
-            opacity: 0.9;
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
         }
 
         /* Post Items */
         .post-item {
             border-bottom: 1px solid var(--border-color);
             padding: 1.5rem 0;
+            margin-bottom: 0.5rem;
         }
         .post-item:last-child {
             border-bottom: none;
@@ -184,63 +160,38 @@
         .post-item:first-child {
             padding-top: 0;
         }
-        .post-item h3 a {
-            color: var(--text-primary);
-            text-decoration: none;
-            font-size: 1.3rem;
-            font-weight: 700;
-            transition: var(--transition);
-        }
-        .post-item h3 a:hover {
-            color: var(--accent);
-        }
-        .post-item p {
-            color: var(--text-secondary);
-            margin: 0.5rem 0 1rem 0;
-        }
-        .post-meta {
-            display: flex;
-            gap: 1rem;
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-
-        /* Author list sidebar */
-        .author-badge {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            padding: 0.8rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 0.8rem;
-        }
-        .author-badge .author-name {
-            font-weight: 600;
-        }
-        .author-badge .author-id {
-            background-color: var(--bg-tertiary);
-            color: var(--accent);
-            font-size: 0.8rem;
-            font-weight: 700;
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-        }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Blogger Showcase - Spartan</h1>
-            <p>SPARTAN + BLADE + HTMX</p>
-        </header>
+        <!-- Main Top Bar -->
+        <nav class="navbar">
+            <a href="{{ url('/') }}" class="nav-logo">Spartan Blogger <span style="font-size: 0.75rem; font-weight:400; color: var(--text-secondary); margin-left: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">SPARTAN + BLADE + HTMX</span></a>
+            <div style="display: flex; align-items: center; gap: 1.25rem;">
+                @if (\App\Core\Application::$app->session->get('user_id'))
+                    <span style="font-size: 0.9rem; color: var(--text-secondary);">
+                        Logged in as <strong style="color: var(--text-primary);">{{ \App\Core\Application::$app->session->get('user_name') }}</strong>
+                    </span>
+                    <form action="{{ url('/logout') }}" method="POST" style="margin: 0; display: inline-flex;">
+                        @csrf
+                        <button type="submit" style="width: auto; padding: 0.4rem 0.85rem; font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 6px; margin: 0; cursor: pointer; transition: var(--transition);">
+                            Logout
+                        </button>
+                    </form>
+                @else
+                    <a href="{{ url('/login') }}" style="color: #60a5fa; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: var(--transition);">Log In</a>
+                    <a href="{{ url('/register') }}" style="color: var(--text-primary); text-decoration: none; font-size: 0.9rem; font-weight: 600; padding: 0.4rem 0.85rem; background: rgba(255, 255, 255, 0.08); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.12); transition: var(--transition);">Sign Up</a>
+                @endif
+            </div>
+        </nav>
 
         <!-- Flash messages -->
         @if ($success = \App\Core\Application::$app->session->getFlash('success_message'))
