@@ -2,24 +2,16 @@
 
 declare(strict_types=1);
 
-use Tests\Sample\Controllers\DashboardController;
+use Tests\Sample\Controllers\BloggerController;
 
 /** @var \App\Core\Application $app */
 
-$app->router->get('/', [DashboardController::class, 'index']);
-$app->router->post('/order', [DashboardController::class, 'storeOrder']);
-$app->router->post('/user', [DashboardController::class, 'storeUser']);
-$app->router->put('/order/{id}', [DashboardController::class, 'updateOrder']);
-$app->router->delete('/order/{id}', [DashboardController::class, 'destroyOrder']);
-$app->router->get('/redirect-test', [DashboardController::class, 'redirectTest']);
-$app->router->get('/search', [DashboardController::class, 'searchPage']);
-$app->router->post('/search/query', [DashboardController::class, 'searchQuery']);
-
-// Dental Clinic routes
-use Tests\Sample\Controllers\ClinicController;
-$app->router->get('/clinic', [ClinicController::class, 'index']);
-$app->router->post('/clinic/patient', [ClinicController::class, 'storePatient']);
-$app->router->post('/clinic/appointment', [ClinicController::class, 'storeAppointment']);
-$app->router->put('/clinic/appointment/{id}', [ClinicController::class, 'updateAppointment']);
-$app->router->post('/clinic/invoice/{id}/pay', [ClinicController::class, 'payInvoice']);
-$app->router->post('/clinic/patients/search', [ClinicController::class, 'searchPatients']);
+$app->router->get('/', [BloggerController::class, 'index']);
+$app->router->post('/user', [BloggerController::class, 'storeUser']);
+$app->router->post('/post', [BloggerController::class, 'storePost']);
+$app->router->get('/post/{id}', [BloggerController::class, 'show']);
+$app->router->put('/post/{id}', [BloggerController::class, 'updatePost']);
+$app->router->delete('/post/{id}', [BloggerController::class, 'destroyPost']);
+$app->router->post('/post/{id}/comment', [BloggerController::class, 'storeComment']);
+$app->router->get('/redirect-test', [BloggerController::class, 'redirectTest']);
+$app->router->post('/search/posts', [BloggerController::class, 'searchPosts']);

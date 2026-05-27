@@ -25,6 +25,7 @@ class Application
 
     public function __construct(array $config)
     {
+        require_once __DIR__ . '/helpers.php';
         // Enforce single instantiation — prevents accidental double-boot
         if (isset(self::$app)) {
             throw new \LogicException('Application has already been instantiated. Only one instance is allowed per process.');

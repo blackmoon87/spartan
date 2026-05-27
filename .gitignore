@@ -7,10 +7,17 @@
 # Cache
 /storage/cache/*
 !/storage/cache/.gitkeep
+/storage/views/*
+!/storage/views/.gitignore
+!/storage/views/.gitkeep
 
 # Logs
 /storage/logs/*
 !/storage/logs/.gitkeep
+*.log
+
+# Databases
+*.sqlite
 
 # OS
 .DS_Store

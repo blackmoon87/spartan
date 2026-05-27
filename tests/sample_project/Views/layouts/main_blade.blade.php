@@ -3,32 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spartan Framework - Blade & HTMX Demo</title>
-    <!-- Google Fonts Inter -->
+    <title>{{ $title ?? 'Blogger Showcase - Spartan Framework' }}</title>
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- HTMX CDN -->
-    <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
-    <!-- Alpine.js CDN -->
-    <script defer src="https://unpkg.com/alpinejs@3.13.10/dist/cdn.min.js"></script>
-
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <style>
         :root {
-            --bg-base: #0f172a;
-            --bg-surface: rgba(30, 41, 59, 0.7);
-            --bg-card: rgba(51, 65, 85, 0.5);
-            --border-color: rgba(71, 85, 105, 0.4);
-            --border-hover: rgba(148, 163, 184, 0.6);
-            --color-text: #f8fafc;
-            --color-muted: #94a3b8;
-            --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.2);
-            --primary-hover: #4f46e5;
-            --radius-lg: 16px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
-            --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+            --border-color: #334155;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
@@ -38,175 +31,223 @@
         }
 
         body {
-            background-color: var(--bg-base);
-            color: var(--color-text);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
             line-height: 1.6;
-            padding: 2rem 1rem;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            overflow-x: hidden;
-            position: relative;
-        }
-
-        body::before {
-            content: '';
-            position: absolute;
-            width: 400px;
-            height: 400px;
-            top: -150px;
-            left: -100px;
-            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
-            z-index: -1;
-            pointer-events: none;
         }
 
         .container {
-            width: 100%;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 2rem 1.5rem;
         }
 
         header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
         }
 
-        .logo {
-            font-size: 2.2rem;
+        header h1 {
+            font-size: 2.5rem;
             font-weight: 800;
-            letter-spacing: -0.05em;
-            background: linear-gradient(135deg, #818cf8 0%, var(--primary) 50%, #3b82f6 100%);
+            background: var(--accent-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            display: inline-block;
             margin-bottom: 0.5rem;
         }
 
-        .subtitle {
-            color: var(--color-muted);
-            font-size: 1rem;
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: 600;
         }
 
-        main {
-            background-color: var(--bg-surface);
+        /* Success/Error Alerts */
+        .alert {
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            font-weight: 500;
+            animation: fadeIn 0.3s ease;
+        }
+        .alert-success {
+            background-color: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+        }
+        .alert-danger {
+            background-color: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        /* Grid Layout */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 7fr 5fr;
+            gap: 2.5rem;
+        }
+
+        @media (max-width: 968px) {
+            .layout-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Card styles */
+        .card {
+            background-color: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: var(--card-shadow);
             border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            padding: 2.5rem;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-        }
-
-        /* Form Controls */
-        .form-group {
             margin-bottom: 1.5rem;
-            position: relative;
+            transition: var(--transition);
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: #475569;
         }
 
-        .form-control {
+        .card h2, .card h3 {
+            font-weight: 700;
+            margin-bottom: 1.2rem;
+            color: var(--text-primary);
+        }
+
+        /* Inputs & Buttons */
+        input[type="text"],
+        input[type="email"],
+        input[type="number"],
+        select,
+        textarea {
             width: 100%;
-            padding: 0.85rem 1rem;
-            background-color: rgba(15, 23, 42, 0.6);
+            padding: 0.8rem 1rem;
+            background-color: var(--bg-primary);
             border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            color: var(--color-text);
-            font-size: 1rem;
+            border-radius: 8px;
+            color: var(--text-primary);
             font-family: inherit;
-            transition: var(--transition-smooth);
+            font-size: 1rem;
+            margin-bottom: 1.2rem;
+            transition: var(--transition);
         }
-
-        .form-control:focus {
+        input:focus, select:focus, textarea:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-glow);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
         }
 
-        /* Results table/list */
-        .results-list {
-            margin-top: 1.5rem;
-            list-style: none;
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        button, .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 0.8rem 1.5rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            text-decoration: none;
+        }
+        button:hover, .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* Post Items */
+        .post-item {
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem 0;
+        }
+        .post-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .post-item:first-child {
+            padding-top: 0;
+        }
+        .post-item h3 a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 1.3rem;
+            font-weight: 700;
+            transition: var(--transition);
+        }
+        .post-item h3 a:hover {
+            color: var(--accent);
+        }
+        .post-item p {
+            color: var(--text-secondary);
+            margin: 0.5rem 0 1rem 0;
+        }
+        .post-meta {
             display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
+            gap: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
         }
 
-        .result-item {
-            padding: 1rem;
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
+        /* Author list sidebar */
+        .author-badge {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: var(--transition-smooth);
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.8rem;
         }
-
-        .result-item:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
+        .author-badge .author-name {
+            font-weight: 600;
         }
-
-        .badge-active {
-            background-color: rgba(16, 185, 129, 0.15);
-            color: #34d399;
+        .author-badge .author-id {
+            background-color: var(--bg-tertiary);
+            color: var(--accent);
+            font-size: 0.8rem;
+            font-weight: 700;
             padding: 0.2rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            border-radius: 12px;
         }
 
-        /* Alpine Demo Widget */
-        .alpine-widget {
-            margin-top: 2rem;
-            padding: 1.25rem;
-            background: rgba(99, 102, 241, 0.05);
-            border: 1px dashed rgba(99, 102, 241, 0.3);
-            border-radius: var(--radius-md);
-            text-align: center;
-        }
-
-        .btn-action {
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 600;
-            font-family: inherit;
-            transition: var(--transition-smooth);
-            margin-top: 0.5rem;
-        }
-
-        .btn-action:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .btn-back {
-            display: inline-block;
-            margin-bottom: 1.5rem;
-            color: var(--color-muted);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            transition: var(--transition-smooth);
-        }
-
-        .btn-back:hover {
-            color: var(--color-text);
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1 class="logo">SPARTAN + BLADE + HTMX</h1>
-            <p class="subtitle">Interactive Real-time Reactive Dashboard</p>
+            <h1>Blogger Showcase - Spartan</h1>
+            <p>SPARTAN + BLADE + HTMX</p>
         </header>
 
-        <a href="/" class="btn-back">← Back to Classic Dashboard</a>
+        <!-- Flash messages -->
+        @if ($success = \App\Core\Application::$app->session->getFlash('success_message'))
+            <div class="alert alert-success">
+                {{ $success }}
+            </div>
+        @endif
 
         <main>
             @yield('content')

@@ -9,16 +9,40 @@ class Request
     protected ?array $jsonParams = null;
 
     /**
-     * Get request URI path, stripping query parameters.
+     * Get request URI path, stripping query parameters and base subdirectory path.
      */
     public function getPath(): string
     {
         $path = $_SERVER['REQUEST_URI'] ?? '/';
         $position = strpos($path, '?');
-        if ($position === false) {
-            return $path;
+        if ($position !== false) {
+            $path = substr($path, 0, $position);
         }
-        return substr($path, 0, $position);
+
+        $basePath = $this->getBasePath();
+        if ($basePath !== '') {
+            if (strpos($path, $basePath) === 0) {
+                $path = substr($path, strlen($basePath));
+            }
+        }
+
+        return $path === '' ? '/' : $path;
+    }
+
+    /**
+     * Get base directory path if application is running in a subdirectory.
+     */
+    public function getBasePath(): string
+    {
+        if (PHP_SAPI === 'cli') {
+            return '';
+        }
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $scriptDir = dirname($scriptName);
+        if ($scriptDir === '/' || $scriptDir === '\\') {
+            return '';
+        }
+        return str_replace('\\', '/', $scriptDir);
     }
 
     /**

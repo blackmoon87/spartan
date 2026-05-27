@@ -174,13 +174,12 @@ try {
     }
     
     // Drop old test tables to ensure fresh state
+    $db->exec("DROP TABLE IF EXISTS `blogger_comments` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `blogger_posts` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_profiles` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_orders` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_users` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_jobs` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `user_roles` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `role_permissions` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `roles` CASCADE");
@@ -243,39 +242,26 @@ try {
         `bio` TEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    // Create dental clinic tables
-    $db->exec("CREATE TABLE `clinic_patients` (
+    // Create blogger tables
+    $db->exec("CREATE TABLE `blogger_posts` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        `name` VARCHAR(255) NOT NULL,
-        `phone` VARCHAR(255) NOT NULL,
-        `email` VARCHAR(255) UNIQUE NOT NULL,
-        `medical_history` TEXT NULL,
-        `created_at` DATETIME NULL,
-        `updated_at` DATETIME NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-    $db->exec("CREATE TABLE `clinic_appointments` (
-        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        `patient_id` INT UNSIGNED NOT NULL,
-        `appointment_date` DATETIME NOT NULL,
-        `status` VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-        `treatment_notes` TEXT NULL,
+        `user_id` INT UNSIGNED NOT NULL,
+        `title` VARCHAR(255) NOT NULL,
+        `body` TEXT NOT NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
-        FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE
+        FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    $db->exec("CREATE TABLE `clinic_invoices` (
+    $db->exec("CREATE TABLE `blogger_comments` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        `patient_id` INT UNSIGNED NOT NULL,
-        `appointment_id` INT UNSIGNED NOT NULL,
-        `total_amount` DECIMAL(10,2) NOT NULL,
-        `paid_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-        `status` VARCHAR(50) NOT NULL DEFAULT 'unpaid',
+        `post_id` INT UNSIGNED NOT NULL,
+        `user_id` INT UNSIGNED NOT NULL,
+        `content` TEXT NOT NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
-        FOREIGN KEY(patient_id) REFERENCES clinic_patients(id) ON DELETE CASCADE,
-        FOREIGN KEY(appointment_id) REFERENCES clinic_appointments(id) ON DELETE CASCADE
+        FOREIGN KEY(post_id) REFERENCES blogger_posts(id) ON DELETE CASCADE,
+        FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
     // Copy jobs schema but naming it `test_jobs` for isolated run
@@ -870,9 +856,19 @@ if (!function_exists('simulate_mvc_request')) {
 $csrfToken = bin2hex(random_bytes(32));
 $app->session->set('_csrf_token', $csrfToken);
 
+// Seed a post for Charlie Modified so GET / has data
+$charlie = (new \Tests\Sample\Models\User())->table()->where('email', 'charlie@mail.com')->first();
+if ($charlie) {
+    (new \Tests\Sample\Models\Post())->create([
+        'user_id' => $charlie['id'],
+        'title' => 'First Post by Charlie Modified',
+        'body' => 'This is a test post body.'
+    ]);
+}
+
 // 1. READ: Test GET / index dashboard rendering
 $dashboardHTML = simulate_mvc_request('GET', '/');
-assert_true(str_contains($dashboardHTML, 'Spartan Framework Showcase'), "MVC Integration GET '/' renders the views layout");
+assert_true(str_contains($dashboardHTML, 'Blogger Showcase - Spartan'), "MVC Integration GET '/' renders the views layout");
 assert_true(str_contains($dashboardHTML, 'Charlie Modified'), "MVC Integration GET '/' retrieves models and renders them in template");
 
 // 2. CREATE (Validation Failure): Test POST /user with invalid inputs
@@ -901,54 +897,55 @@ assert_true(str_contains($app->session->getFlash('success_message', ''), 'create
 $user = (new \Tests\Sample\Models\User())->table()->where('email', 'mvc@integration.com')->first();
 assert_true(!empty($user), "MVC model stores record into database successfully");
 
-// 4. UPDATE: Test PUT /order/{id} status toggle
-$orderModel = new \Tests\Sample\Models\Order();
-$orderId = $orderModel->create([
+// 4. UPDATE: Test PUT /post/{id} update
+$postModel = new \Tests\Sample\Models\Post();
+$postId = $postModel->create([
     'user_id' => (int)$user['id'],
-    'status'  => 'pending',
-    'total'   => 150.00
+    'title'   => 'Initial Title',
+    'body'    => 'Initial post body content here'
 ]);
 
 $mockResponse->redirectUrl = '';
 $app->session->removeFlashMessages(); // clear flash
-simulate_mvc_request('POST', "/order/{$orderId}", [
+simulate_mvc_request('POST', "/post/{$postId}", [
     '_method' => 'PUT',
-    'status'  => 'completed',
+    'title'   => 'Updated Title',
+    'body'    => 'Updated post body content here',
     '_csrf' => $csrfToken
 ]);
 assert_equals('/', $mockResponse->redirectUrl, "MVC PUT updates redirect properly");
-$updatedOrder = $orderModel->find($orderId);
-assert_equals('completed', $updatedOrder['status'], "MVC PUT update successfully updates model attributes in the DB");
+$updatedPost = $postModel->find($postId);
+assert_equals('Updated Title', $updatedPost['title'], "MVC PUT update successfully updates model attributes in the DB");
 
-// 5. DELETE: Test DELETE /order/{id}
+// 5. DELETE: Test DELETE /post/{id}
 $mockResponse->redirectUrl = '';
 $app->session->removeFlashMessages(); // clear flash
-simulate_mvc_request('POST', "/order/{$orderId}", [
+simulate_mvc_request('POST', "/post/{$postId}", [
     '_method' => 'DELETE',
     '_csrf' => $csrfToken
 ]);
 assert_equals('/', $mockResponse->redirectUrl, "MVC DELETE redirects properly");
-$deletedOrder = $orderModel->find($orderId);
-assert_true($deletedOrder === null, "MVC DELETE successfully removes record from database");
+$deletedPost = $postModel->find($postId);
+assert_true($deletedPost === null, "MVC DELETE successfully removes record from database");
 
-// 6. Blade & HTMX Integration: Test GET /search and POST /search/query
-(new \Tests\Sample\Models\User())->create([
-    'name'  => 'Searchable User',
-    'email' => 'search@example.com'
+// 6. Blade & HTMX Integration: Test GET / search rendering and POST /search/posts
+(new \Tests\Sample\Models\Post())->create([
+    'user_id' => (int)$user['id'],
+    'title'   => 'Searchable Post Title',
+    'body'    => 'Searchable body content'
 ]);
 
-$searchPageHtml = simulate_mvc_request('GET', '/search');
-assert_true(str_contains($searchPageHtml, 'Customer Directory Search'), "Blade template renders sections correctly");
+$searchPageHtml = simulate_mvc_request('GET', '/');
+assert_true(str_contains($searchPageHtml, 'Blog Posts Directory'), "Blade template renders sections correctly");
 assert_true(str_contains($searchPageHtml, 'SPARTAN + BLADE + HTMX'), "Blade template inherits layout structures (@extends)");
-assert_true(str_contains($searchPageHtml, 'hx-post="/search/query"'), "Blade templates support HTMX tags");
+assert_true(str_contains($searchPageHtml, 'hx-post="/search/posts"'), "Blade templates support HTMX tags");
 
 // Simulate POST search request
-$searchResultsHtml = simulate_mvc_request('POST', '/search/query', [
+$searchResultsHtml = simulate_mvc_request('POST', '/search/posts', [
     'query' => 'Searchable',
     '_csrf' => $csrfToken
 ]);
-assert_true(str_contains($searchResultsHtml, 'Searchable User'), "HTMX searchQuery controller renders matching query results");
-assert_true(str_contains($searchResultsHtml, 'search@example.com'), "HTMX searchQuery renders values cleanly");
+assert_true(str_contains($searchResultsHtml, 'Searchable Post Title'), "HTMX searchPosts controller renders matching query results");
 assert_true(!str_contains($searchResultsHtml, 'SPARTAN + BLADE + HTMX'), "renderViewOnly compiles without layouts");
 
 // Test Nested Blade Include State Isolation
@@ -973,133 +970,74 @@ assert_true(str_contains($nestedRender, '<html><body>'), "Parent layout is prese
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dental Clinic Integration Tests [ignoring loop detection]
+// Blogger Management System Integration Tests
 // ─────────────────────────────────────────────────────────────────────────────
-test_group("Dental Clinic Management System");
+test_group("Blogger Management System");
 
-$patientModel = new \Tests\Sample\Models\Patient();
-$appointmentModel = new \Tests\Sample\Models\Appointment();
-$invoiceModel = new \Tests\Sample\Models\Invoice();
+$postModel = new \Tests\Sample\Models\Post();
+$commentModel = new \Tests\Sample\Models\Comment();
+$userModel = new \Tests\Sample\Models\User();
+
+// Get the user we created earlier
+$author = $userModel->table()->where('email', 'mvc@integration.com')->first();
+$authorId = (int)$author['id'];
 
 // 1. Model Relationship & Creation tests
-$patientId = $patientModel->create([
-    'name' => 'Alice Clinic',
-    'phone' => '555-9876',
-    'email' => 'alice@clinic.com',
-    'medical_history' => 'Lactose intolerant'
+$postId = $postModel->create([
+    'user_id' => $authorId,
+    'title' => 'Blogger Integration Test Post',
+    'body' => 'This is a detailed post about the Spartan framework.'
 ]);
-assert_true(is_numeric($patientId), "Patient created successfully and returned ID");
+assert_true(is_numeric($postId), "Post created successfully and returned ID");
 
-$apptId = $appointmentModel->create([
-    'patient_id' => (int)$patientId,
-    'appointment_date' => '2026-06-01 10:00:00',
-    'status' => 'scheduled',
-    'treatment_notes' => 'Routine tooth cleaning'
+$commentId = $commentModel->create([
+    'post_id' => (int)$postId,
+    'user_id' => $authorId,
+    'content' => 'Great post, very informative!'
 ]);
-assert_true(is_numeric($apptId), "Appointment created successfully and returned ID");
-
-$invoiceId = $invoiceModel->create([
-    'patient_id' => (int)$patientId,
-    'appointment_id' => (int)$apptId,
-    'total_amount' => 120.00,
-    'paid_amount' => 0.00,
-    'status' => 'unpaid'
-]);
-assert_true(is_numeric($invoiceId), "Invoice created successfully and returned ID");
+assert_true(is_numeric($commentId), "Comment created successfully and returned ID");
 
 // Test Relationships
-$fetchedPatient = $patientModel->find($patientId);
-$patientAppts = $patientModel->appointments()->for($fetchedPatient);
-assert_equals(1, count($patientAppts), "Patient appointments relationship resolves successfully");
+$fetchedPost = $postModel->find($postId);
+$postComments = $postModel->comments()->for($fetchedPost);
+assert_equals(1, count($postComments), "Post comments relationship resolves successfully");
 
-$fetchedAppt = $appointmentModel->find($apptId);
-$apptPatient = $appointmentModel->patient()->for($fetchedAppt);
-assert_equals('Alice Clinic', $apptPatient['name'], "Appointment belongsTo patient relationship resolves successfully");
+$fetchedComment = $commentModel->find($commentId);
+$commentAuthor = $commentModel->author()->for($fetchedComment);
+assert_equals('MVC Integration User', $commentAuthor['name'], "Comment belongsTo author relationship resolves successfully");
+
+$commentPost = $commentModel->post()->for($fetchedComment);
+assert_equals('Blogger Integration Test Post', $commentPost['title'], "Comment belongsTo post relationship resolves successfully");
 
 // 2. Controller & Routing HTTP Tests
 $csrfToken = $app->session->get('_csrf_token');
 
-// Post a new patient via route
+// Post a new comment via route
 $mockResponse->redirectUrl = '';
-simulate_mvc_request('POST', '/clinic/patient', [
-    'name' => 'Bob Dentist',
-    'phone' => '555-1234',
-    'email' => 'bob@dentist.com',
-    'medical_history' => 'No medical issues',
+simulate_mvc_request('POST', "/post/{$postId}/comment", [
+    'user_id' => $authorId,
+    'content' => 'I agree with this completely!',
     '_csrf' => $csrfToken
 ]);
-assert_equals('/clinic', $mockResponse->redirectUrl, "Store patient redirects back to clinic dashboard");
+assert_equals("/post/{$postId}", $mockResponse->redirectUrl, "Store comment redirects back to the post page");
 
-$bobPatient = $patientModel->table()->where('email', 'bob@dentist.com')->first();
-assert_true(!empty($bobPatient), "Store patient route successfully inserts patient into database");
+$newComment = $commentModel->table()->where('content', 'I agree with this completely!')->first();
+assert_true(!empty($newComment), "Store comment route successfully inserts comment into database");
 
-// Post a new appointment (which auto-creates an invoice)
+// Test GET /post/{id} show page rendering
+$postPageHtml = simulate_mvc_request('GET', "/post/{$postId}");
+assert_true(str_contains($postPageHtml, 'Blogger Integration Test Post'), "Post page renders title");
+assert_true(str_contains($postPageHtml, 'Great post, very informative!'), "Post page renders comments content");
+assert_true(str_contains($postPageHtml, 'MVC Integration User'), "Post page displays comment author name");
+
+// Test GET /redirect-test open redirect check
 $mockResponse->redirectUrl = '';
-simulate_mvc_request('POST', '/clinic/appointment', [
-    'patient_id' => (int)$bobPatient['id'],
-    'appointment_date' => '2026-06-02 14:00:00',
-    'procedure_cost' => '250.50',
-    'treatment_notes' => 'Tooth extraction',
-    '_csrf' => $csrfToken
-]);
-assert_equals('/clinic', $mockResponse->redirectUrl, "Store appointment redirects back to clinic dashboard");
+simulate_mvc_request('GET', '/redirect-test', [], ['url' => '/some-safe-path']);
+assert_equals('/some-safe-path', $mockResponse->redirectUrl, "Redirect test redirects to local target");
 
-$bobAppt = $appointmentModel->table()->where('patient_id', (int)$bobPatient['id'])->first();
-assert_true(!empty($bobAppt), "Store appointment route successfully inserts appointment");
-
-$bobInvoice = $invoiceModel->table()->where('appointment_id', (int)$bobAppt['id'])->first();
-assert_true(!empty($bobInvoice), "Store appointment automatically generates matching clinic invoice");
-assert_equals(250.50, (float)$bobInvoice['total_amount'], "Auto-generated invoice total amount is correct");
-assert_equals('unpaid', $bobInvoice['status'], "Auto-generated invoice starts as unpaid");
-
-// Pay invoice (partial payment)
 $mockResponse->redirectUrl = '';
-simulate_mvc_request('POST', "/clinic/invoice/{$bobInvoice['id']}/pay", [
-    'amount' => '100.00',
-    '_csrf' => $csrfToken
-]);
-assert_equals('/clinic', $mockResponse->redirectUrl, "Pay invoice redirects back to clinic dashboard");
-
-$updatedInvoice = $invoiceModel->find($bobInvoice['id']);
-assert_equals(100.00, (float)$updatedInvoice['paid_amount'], "Partial payment is successfully recorded");
-assert_equals('partial', $updatedInvoice['status'], "Invoice status transitions to partial");
-
-// Pay invoice (remaining payment)
-$mockResponse->redirectUrl = '';
-simulate_mvc_request('POST', "/clinic/invoice/{$bobInvoice['id']}/pay", [
-    'amount' => '150.50',
-    '_csrf' => $csrfToken
-]);
-assert_equals('/clinic', $mockResponse->redirectUrl, "Remaining payment redirects back to clinic dashboard");
-
-$fullyPaidInvoice = $invoiceModel->find($bobInvoice['id']);
-assert_equals(250.50, (float)$fullyPaidInvoice['paid_amount'], "Total paid amount is updated");
-assert_equals('paid', $fullyPaidInvoice['status'], "Invoice status transitions to paid");
-
-// Complete appointment (PUT status spoofing)
-$mockResponse->redirectUrl = '';
-simulate_mvc_request('POST', "/clinic/appointment/{$bobAppt['id']}", [
-    '_method' => 'PUT',
-    'status' => 'completed',
-    '_csrf' => $csrfToken
-]);
-assert_equals('/clinic', $mockResponse->redirectUrl, "Complete appointment redirects back to clinic dashboard");
-
-$completedAppt = $appointmentModel->find($bobAppt['id']);
-assert_equals('completed', $completedAppt['status'], "Appointment status successfully updated to completed");
-
-// Test GET /clinic dashboard view rendering
-$clinicDashboardHtml = simulate_mvc_request('GET', '/clinic');
-assert_true(str_contains($clinicDashboardHtml, 'Total Patients'), "Clinic dashboard renders stats widgets");
-assert_true(str_contains($clinicDashboardHtml, 'Bob Dentist'), "Clinic dashboard displays patient name in patient records");
-assert_true(str_contains($clinicDashboardHtml, 'Tooth extraction'), "Clinic dashboard displays treatment notes in appointments");
-
-// HTMX Patient Live Search
-$searchHtml = simulate_mvc_request('POST', '/clinic/patients/search', [
-    'query' => 'Bob',
-    '_csrf' => $csrfToken
-]);
-assert_true(str_contains($searchHtml, 'Bob Dentist'), "HTMX patients search route returns search result partial");
+simulate_mvc_request('GET', '/redirect-test', [], ['url' => 'https://malicious-external-domain.com']);
+assert_equals('/', $mockResponse->redirectUrl, "Redirect test blocks external domain and redirects to '/'");
 
 // Restore original response object
 $app->response = $originalResponse;
@@ -1886,13 +1824,12 @@ try {
 // ─────────────────────────────────────────────────────────────────────────────
 test_group("Tear Down");
 try {
+    $db->exec("DROP TABLE IF EXISTS `blogger_comments` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `blogger_posts` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_profiles` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_orders` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_users` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_jobs` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
-    $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `user_roles` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `role_permissions` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `roles` CASCADE");

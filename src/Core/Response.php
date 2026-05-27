@@ -83,6 +83,14 @@ class Response
             }
         }
 
+        // Prepend base path if relative URL and running in a subdirectory
+        if (str_starts_with($url, '/') && !str_starts_with($url, '//')) {
+            $basePath = Application::$app->request->getBasePath();
+            if ($basePath !== '' && !str_starts_with($url, $basePath)) {
+                $url = $basePath . $url;
+            }
+        }
+
         $this->redirectUrl = $url;
         $this->setHeader('Location', $url);
         if ($this->statusCode < 300 || $this->statusCode >= 400) {

@@ -13,10 +13,10 @@ class User extends Model
     protected bool $timestamps = true;
 
     /**
-     * Define hasMany relationship to orders.
+     * Define hasMany relationship to posts.
      */
-    public function orders(): RelationQuery
+    public function posts(): RelationQuery
     {
-        return $this->hasMany(Order::class, 'user_id');
+        return $this->hasMany(Post::class, 'user_id');
     }
 }
