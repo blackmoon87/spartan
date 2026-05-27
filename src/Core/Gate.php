@@ -105,9 +105,9 @@ class Gate
             if (class_exists($userClass)) {
                 try {
                     $userModel = new $userClass();
-                    $user = $userModel->find($userId);
+                    $user = $userModel->findInstance($userId);
                     if ($user) {
-                        Application::$app->container->singleton('auth_user', fn() => $user);
+                        Application::$app->container->instance('auth_user', $user);
                         return $user;
                     }
                 } catch (\Throwable $e) {
