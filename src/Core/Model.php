@@ -103,6 +103,23 @@ abstract class Model
     }
 
     /**
+     * Find a record by ID and return a hydrated Model instance.
+     */
+    public function findInstance(int|string $id): ?static
+    {
+        $row = $this->find($id);
+        if (!$row) {
+            return null;
+        }
+
+        $instance = new static();
+        foreach ($row as $key => $value) {
+            $instance->$key = $value;
+        }
+        return $instance;
+    }
+
+    /**
      * Retrieve all records belonging to the model's table.
      */
     public function all(): array

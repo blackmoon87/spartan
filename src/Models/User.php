@@ -11,6 +11,8 @@ class User extends Model
 {
     use \App\Core\Traits\HasAuthorization;
 
+    protected string $table = 'users';
+
     /**
      * Fetch user count from the database safely.
      */

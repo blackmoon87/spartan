@@ -146,10 +146,10 @@ if (empty($config['db']['database']) || $config['db']['database'] !== 'spartan_t
 }
 // Force host, port, username, password to fall back to MySQL defaults if SQLite was selected in .env
 if (($_ENV['DB_CONNECTION'] ?? 'mysql') === 'sqlite') {
-    $config['db']['host'] = $_ENV['DB_HOST'] ?? '127.0.0.1';
-    $config['db']['port'] = $_ENV['DB_PORT'] ?? '3306';
-    $config['db']['username'] = $_ENV['DB_USERNAME'] ?? 'root';
-    $config['db']['password'] = $_ENV['DB_PASSWORD'] ?? '';
+    $config['db']['host'] = !empty($_ENV['DB_HOST']) ? $_ENV['DB_HOST'] : '127.0.0.1';
+    $config['db']['port'] = !empty($_ENV['DB_PORT']) ? $_ENV['DB_PORT'] : '3306';
+    $config['db']['username'] = !empty($_ENV['DB_USERNAME']) ? $_ENV['DB_USERNAME'] : 'root';
+    $config['db']['password'] = !empty($_ENV['DB_PASSWORD']) ? $_ENV['DB_PASSWORD'] : '';
 }
 
 // Dynamically create database if missing
