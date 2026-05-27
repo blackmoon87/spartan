@@ -56,6 +56,10 @@ class View
         if (file_exists($bladeFile)) {
             $compiledFile = $this->compile($view);
             
+            // Backup the current rendering state (nested rendering protection)
+            $previousLayout = $this->extendedLayout;
+            $previousSections = $this->sections;
+            
             $this->extendedLayout = null;
             $this->sections = [];
             
@@ -63,8 +67,12 @@ class View
             
             if ($this->extendedLayout !== null) {
                 $layoutCompiled = $this->compile($this->extendedLayout);
-                return $this->renderCompiled($layoutCompiled, $params);
+                $viewContent = $this->renderCompiled($layoutCompiled, $params);
             }
+            
+            // Restore previous rendering state
+            $this->extendedLayout = $previousLayout;
+            $this->sections = $previousSections;
             
             return $viewContent;
         }
@@ -89,6 +97,10 @@ class View
         if (file_exists($bladeFile)) {
             $compiledFile = $this->compile($view);
             
+            // Backup the current rendering state (nested rendering protection)
+            $previousLayout = $this->extendedLayout;
+            $previousSections = $this->sections;
+            
             $this->extendedLayout = null;
             $this->sections = [];
             
@@ -96,8 +108,12 @@ class View
             
             if ($this->extendedLayout !== null) {
                 $layoutCompiled = $this->compile($this->extendedLayout);
-                return $this->renderCompiled($layoutCompiled, $params);
+                $viewContent = $this->renderCompiled($layoutCompiled, $params);
             }
+            
+            // Restore previous rendering state
+            $this->extendedLayout = $previousLayout;
+            $this->sections = $previousSections;
             
             return $viewContent;
         }

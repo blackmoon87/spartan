@@ -134,9 +134,17 @@ $_SERVER['REQUEST_URI'] = '/';
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SESSION = []; // clean session mock
 
-// Initialize DB if not configured
-if (empty($config['db']['database'])) {
+// Force MySQL for tests to prevent SQLite syntax conflicts when .env is configured for SQLite.
+$config['db']['connection'] = 'mysql';
+if (empty($config['db']['database']) || $config['db']['database'] !== 'spartan_test_db') {
     $config['db']['database'] = 'spartan_test_db';
+}
+// Force host, port, username, password to fall back to MySQL defaults if SQLite was selected in .env
+if (($_ENV['DB_CONNECTION'] ?? 'mysql') === 'sqlite') {
+    $config['db']['host'] = $_ENV['DB_HOST'] ?? '127.0.0.1';
+    $config['db']['port'] = $_ENV['DB_PORT'] ?? '3306';
+    $config['db']['username'] = $_ENV['DB_USERNAME'] ?? 'root';
+    $config['db']['password'] = $_ENV['DB_PASSWORD'] ?? '';
 }
 
 // Dynamically create database if missing
@@ -900,6 +908,24 @@ $searchResultsHtml = simulate_mvc_request('POST', '/search/query', [
 assert_true(str_contains($searchResultsHtml, 'Searchable User'), "HTMX searchQuery controller renders matching query results");
 assert_true(str_contains($searchResultsHtml, 'search@example.com'), "HTMX searchQuery renders values cleanly");
 assert_true(!str_contains($searchResultsHtml, 'SPARTAN + BLADE + HTMX'), "renderViewOnly compiles without layouts");
+
+// Test Nested Blade Include State Isolation
+$viewsPath = $app->view->getViewsPath();
+file_put_contents($viewsPath . '/test_parent_layout.blade.php', "<html><body>@yield('content')</body></html>");
+file_put_contents($viewsPath . '/test_parent_view.blade.php', "@extends('test_parent_layout')\n@section('content')\nParent Start\n@include('test_child_view')\nParent End\n@endsection");
+file_put_contents($viewsPath . '/test_child_view.blade.php', "Child Content");
+
+$nestedRender = $app->view->render('test_parent_view');
+assert_true(str_contains($nestedRender, 'Parent Start'), "Parent view content before include is rendered");
+assert_true(str_contains($nestedRender, 'Child Content'), "Child view content inside include is rendered");
+assert_true(str_contains($nestedRender, 'Parent End'), "Parent view content after include is rendered");
+assert_true(str_contains($nestedRender, '<html><body>'), "Parent layout is preserved and rendered");
+
+// Cleanup
+@unlink($viewsPath . '/test_parent_layout.blade.php');
+@unlink($viewsPath . '/test_parent_view.blade.php');
+@unlink($viewsPath . '/test_child_view.blade.php');
+
 
 
 
