@@ -1,0 +1,111 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Core;
+
+class Session
+{
+    protected const FLASH_KEY = 'flash_messages';
+
+    public function __construct()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            // Harden the session cookie before starting the session:
+            //   HttpOnly  — JavaScript (document.cookie) cannot read the session ID
+            //   SameSite  — Lax prevents the cookie being sent on cross-site POST requests
+            //   Secure    — Only transmit over HTTPS (auto-detected from the current request)
+            $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                    || (($_SERVER['SERVER_PORT'] ?? 80) == 443);
+
+            session_set_cookie_params([
+                'lifetime' => 0,
+                'path'     => '/',
+                'domain'   => '',
+                'secure'   => $isHttps,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+
+            session_start();
+        }
+
+        // Initialize flash storage
+        $flashMessages = $_SESSION[self::FLASH_KEY] ?? [];
+        foreach ($flashMessages as $key => &$flashMessage) {
+            // Mark for removal on the next request cycle
+            $flashMessage['remove'] = true;
+        }
+        $_SESSION[self::FLASH_KEY] = $flashMessages;
+    }
+
+    public function set(string $key, mixed $value): void
+    {
+        $_SESSION[$key] = $value;
+    }
+
+    public function get(string $key, mixed $default = null): mixed
+    {
+        return $_SESSION[$key] ?? $default;
+    }
+
+    public function remove(string $key): void
+    {
+        unset($_SESSION[$key]);
+    }
+
+    public function setFlash(string $key, string $message): void
+    {
+        $_SESSION[self::FLASH_KEY][$key] = [
+            'remove' => false,
+            'value' => $message
+        ];
+    }
+
+    public function getFlash(string $key, ?string $default = null): ?string
+    {
+        return $_SESSION[self::FLASH_KEY][$key]['value'] ?? $default;
+    }
+
+    /**
+     * Clear marked flash messages at the end of request lifecycle.
+     */
+    public function removeFlashMessages(): void
+    {
+        $flashMessages = $_SESSION[self::FLASH_KEY] ?? [];
+        foreach ($flashMessages as $key => $flashMessage) {
+            if ($flashMessage['remove']) {
+                unset($flashMessages[$key]);
+            }
+        }
+        $_SESSION[self::FLASH_KEY] = $flashMessages;
+    }
+
+    public function destroy(): void
+    {
+        $_SESSION = [];
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params["path"],
+                $params["domain"],
+                $params["secure"],
+                $params["httponly"]
+            );
+        }
+        session_destroy();
+    }
+
+    /**
+     * Regenerate the session ID to prevent session fixation attacks.
+     * MUST be called immediately after any privilege escalation (login, role change).
+     * Passing true deletes the old session file from the server.
+     */
+    public function regenerate(): void
+    {
+        session_regenerate_id(true);
+    }
+}

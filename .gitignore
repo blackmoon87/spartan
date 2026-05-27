@@ -1,0 +1,18 @@
+# Environment
+.env
+
+# Composer
+/vendor/
+
+# Cache
+/storage/cache/*
+!/storage/cache/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
