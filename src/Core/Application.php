@@ -11,7 +11,7 @@ class Application
      * overwriting the global application instance post-boot.
      * PHP 8.1+ readonly enforcement.
      */
-    public static readonly Application $app;
+    public static Application $app;
     public Router    $router;
     public Request   $request;
     public Response  $response;

@@ -22,13 +22,19 @@ class Database
     public static function getInstance(array $config): PDO
     {
         if (self::$instance === null) {
-            $dsn = sprintf(
-                '%s:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-                $config['connection'] ?? 'mysql',
-                $config['host'] ?? '127.0.0.1',
-                $config['port'] ?? '3306',
-                $config['database'] ?? ''
-            );
+            $connection = $config['connection'] ?? 'mysql';
+
+            if ($connection === 'sqlite') {
+                $dsn = 'sqlite:' . ($config['database'] ?? ':memory:');
+            } else {
+                $dsn = sprintf(
+                    '%s:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+                    $connection,
+                    $config['host'] ?? '127.0.0.1',
+                    $config['port'] ?? '3306',
+                    $config['database'] ?? ''
+                );
+            }
 
             try {
                 self::$instance = new PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
@@ -61,3 +67,4 @@ class Database
     {
         self::$instance = $mock;
     }
+}

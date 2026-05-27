@@ -138,7 +138,8 @@ class QueryBuilder
     public function having(string $column, mixed $value, string $operator = '='): static
     {
         $operator = strtoupper(trim($operator));
-        $this->havings[]        = "`{$column}` {$operator} ?";
+        $col = $this->escapeColumn($column);
+        $this->havings[]        = "{$col} {$operator} ?";
         $this->havingBindings[] = $value;
         return $this;
     }
@@ -356,16 +357,17 @@ class QueryBuilder
     private function addWhere(string $type, string $column, mixed $value, string $operator): static
     {
         $operator = strtoupper(trim($operator));
+        $col = $this->escapeColumn($column);
 
         // Handle IN / NOT IN with array values
         if (is_array($value)) {
             $placeholders = implode(', ', array_fill(0, count($value), '?'));
             $op  = ($operator === 'NOT IN') ? 'NOT IN' : 'IN';
-            $sql = "`{$column}` {$op} ({$placeholders})";
+            $sql = "{$col} {$op} ({$placeholders})";
             $this->wheres[]   = ['type' => $type, 'sql' => $sql];
             $this->bindings   = array_merge($this->bindings, $value);
         } else {
-            $this->wheres[]   = ['type' => $type, 'sql' => "`{$column}` {$operator} ?"];
+            $this->wheres[]   = ['type' => $type, 'sql' => "{$col} {$operator} ?"];
             $this->bindings[] = $value;
         }
 
@@ -374,7 +376,7 @@ class QueryBuilder
 
     private function buildSelect(): array
     {
-        $cols = implode(', ', $this->selects);
+        $cols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->selects));
         [$whereSQL, $bindings] = $this->buildWhere();
 
         $sql  = "SELECT {$cols} FROM `{$this->table}`";
@@ -387,7 +389,7 @@ class QueryBuilder
         $sql .= $whereSQL;
 
         if (!empty($this->groupBys)) {
-            $cols  = implode(', ', array_map(fn($c) => "`{$c}`", $this->groupBys));
+            $cols  = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->groupBys));
             $sql  .= " GROUP BY {$cols}";
         }
         if (!empty($this->havings)) {
@@ -395,7 +397,8 @@ class QueryBuilder
             $bindings = array_merge($bindings, $this->havingBindings);
         }
         if ($this->orderCol !== null) {
-            $sql .= " ORDER BY `{$this->orderCol}` {$this->orderDir}";
+            $col  = $this->escapeColumn($this->orderCol);
+            $sql .= " ORDER BY {$col} {$this->orderDir}";
         }
         if ($this->limitVal !== null) {
             $sql .= " LIMIT {$this->limitVal}";
@@ -427,5 +430,32 @@ class QueryBuilder
         $stmt = $this->db->prepare($sql);
         $stmt->execute($bindings);
         return $stmt;
+    }
+
+    /**
+     * Escape a column name with backticks, handling table prefixes safely.
+     * e.g. "users.id" -> "`users`.`id`"
+     *      "id"       -> "`id`"
+     */
+    private function escapeColumn(string $column): string
+    {
+        $column = trim($column);
+        if ($column === '*' || $column === '') {
+            return $column;
+        }
+
+        if (str_contains($column, '(') || str_contains($column, ')')) {
+            return $column;
+        }
+
+        // Handle alias: "users.id as user_id" -> "`users`.`id` AS `user_id`"
+        if (preg_match('/\s+as\s+/i', $column)) {
+            $parts = preg_split('/\s+as\s+/i', $column);
+            return $this->escapeColumn($parts[0]) . ' AS ' . $this->escapeColumn($parts[1]);
+        }
+
+        $parts = explode('.', $column);
+        $escaped = array_map(fn($p) => $p === '*' ? '*' : '`' . str_replace('`', '', $p) . '`', $parts);
+        return implode('.', $escaped);
     }
 }

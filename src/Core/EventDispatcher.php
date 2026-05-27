@@ -135,7 +135,7 @@ class EventDispatcher
     // Internal
     // ─────────────────────────────────────────────────────────────────────────
 
-    private function executeSync(string $event, string|callable $listener, mixed $payload): void
+    protected function executeSync(string $event, string|callable $listener, mixed $payload): void
     {
         if (is_callable($listener)) {
             $listener($payload);
@@ -158,7 +158,7 @@ class EventDispatcher
         );
     }
 
-    private function pushToQueue(string $event, array $entry, mixed $payload): void
+    protected function pushToQueue(string $event, array $entry, mixed $payload): void
     {
         $db = Application::$app->db ?? null;
 

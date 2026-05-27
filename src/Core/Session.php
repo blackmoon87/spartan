@@ -54,7 +54,7 @@ class Session
         unset($_SESSION[$key]);
     }
 
-    public function setFlash(string $key, string $message): void
+    public function setFlash(string $key, mixed $message): void
     {
         $_SESSION[self::FLASH_KEY][$key] = [
             'remove' => false,
@@ -62,10 +62,11 @@ class Session
         ];
     }
 
-    public function getFlash(string $key, ?string $default = null): ?string
+    public function getFlash(string $key, mixed $default = null): mixed
     {
         return $_SESSION[self::FLASH_KEY][$key]['value'] ?? $default;
     }
+
 
     /**
      * Clear marked flash messages at the end of request lifecycle.

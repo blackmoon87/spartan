@@ -7,6 +7,28 @@ namespace App\Core;
 class View
 {
     private string $layout = 'main';
+    private string $viewsPath;
+
+    public function __construct(?string $viewsPath = null)
+    {
+        $this->viewsPath = $viewsPath ?: dirname(__DIR__) . '/Views';
+    }
+
+    /**
+     * Get the current views directory path.
+     */
+    public function getViewsPath(): string
+    {
+        return $this->viewsPath;
+    }
+
+    /**
+     * Set the current views directory path.
+     */
+    public function setViewsPath(string $path): void
+    {
+        $this->viewsPath = rtrim($path, '/\\');
+    }
 
     /**
      * Set the current rendering layout name.
@@ -70,7 +92,7 @@ class View
         // Bind $this to the view scope so layout files can call $this->escape(), $this->flash() etc.
         $renderer = \Closure::bind(function() use ($params) {
             extract($params, EXTR_SKIP);
-            $layoutPath = dirname(__DIR__) . "/Views/layouts/{$this->layout}.php";
+            $layoutPath = $this->viewsPath . "/layouts/{$this->layout}.php";
             if (!file_exists($layoutPath)) {
                 return '{{content}}';
             }
@@ -99,12 +121,12 @@ class View
 
         $renderer = \Closure::bind(function() use ($view, $params) {
             extract($params, EXTR_SKIP);
-            $viewPath = dirname(__DIR__) . "/Views/{$view}.php";
+            $viewPath = $this->viewsPath . "/{$view}.php";
 
             // Secondary guard: resolved path must stay inside the Views directory
-            $viewsBase = realpath(dirname(__DIR__) . '/Views');
+            $viewsBase = realpath($this->viewsPath);
             $resolvedPath = realpath($viewPath);
-            if ($resolvedPath === false || !str_starts_with($resolvedPath, $viewsBase)) {
+            if ($resolvedPath === false || $viewsBase === false || !str_starts_with($resolvedPath, $viewsBase)) {
                 return "View [{$view}] not found.";
             }
 
