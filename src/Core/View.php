@@ -11,10 +11,19 @@ class View
     private array $sections = [];
     private ?string $activeSection = null;
     private ?string $extendedLayout = null;
+    private array $shared = [];
 
     public function __construct(?string $viewsPath = null)
     {
         $this->viewsPath = $viewsPath ?: dirname(__DIR__) . '/Views';
+    }
+
+    /**
+     * Share a variable globally with all views.
+     */
+    public function share(string $key, mixed $value): void
+    {
+        $this->shared[$key] = $value;
     }
 
     /**
@@ -50,6 +59,14 @@ class View
             throw new \InvalidArgumentException(
                 "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
             );
+        }
+
+        $params = array_merge($this->shared, $params);
+        if (!isset($params['authUser'])) {
+            $user = Gate::resolveUser();
+            if ($user) {
+                $params['authUser'] = $user;
+            }
         }
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
@@ -91,6 +108,14 @@ class View
             throw new \InvalidArgumentException(
                 "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
             );
+        }
+
+        $params = array_merge($this->shared, $params);
+        if (!isset($params['authUser'])) {
+            $user = Gate::resolveUser();
+            if ($user) {
+                $params['authUser'] = $user;
+            }
         }
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";

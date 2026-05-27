@@ -1854,6 +1854,28 @@ try {
     $resDirectives2 = $viewRef->invoke($app->view, "@role('admin', 'editor')Admin stuff @endrole");
     assert_equals("<?php if((\$__user = \App\Core\Gate::resolveUser()) && method_exists(\$__user, 'hasRole') && \$__user->hasRole('admin', 'editor')): ?>Admin stuff <?php endif; ?>", $resDirectives2, "View compiles @role directive correctly");
 
+    // 6. Test View Share & Auto authUser Inject
+    $viewDir = $app->view->getViewsPath();
+    $testViewFile = $viewDir . '/test_share.blade.php';
+    file_put_contents($testViewFile, "Site: {{ \$siteName }}, User: {{ \$authUser->name }}");
+
+    $app->view->share('siteName', 'Spartan');
+    
+    $testUserObj = new \App\Models\User();
+    $testUserObj->name = 'Ali';
+    $app->container->instance('auth_user', $testUserObj);
+
+    $renderResult = $app->view->renderViewOnly('test_share');
+    assert_equals("Site: Spartan, User: Ali", trim($renderResult), "View::share and authUser auto-injection render correctly");
+
+    if (file_exists($testViewFile)) {
+        unlink($testViewFile);
+    }
+    $cachedFile = dirname(__DIR__) . '/storage/views/' . md5('test_share') . '.php';
+    if (file_exists($cachedFile)) {
+        unlink($cachedFile);
+    }
+
 } catch (\Throwable $e) {
     assert_true(false, "Logger, Dialect or FormRequest test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }

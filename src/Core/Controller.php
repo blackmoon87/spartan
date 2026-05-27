@@ -26,6 +26,14 @@ abstract class Controller
     }
 
     /**
+     * Share a variable globally with all views.
+     */
+    public function share(string $key, mixed $value): void
+    {
+        Application::$app->view->share($key, $value);
+    }
+
+    /**
      * Render the given view with dynamic parameters.
      */
     public function render(string $view, array $params = []): string
