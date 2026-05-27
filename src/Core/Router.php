@@ -250,6 +250,10 @@ class Router
             if (!class_exists($controllerClass)) {
                 throw new \InvalidArgumentException("Controller class [{$controllerClass}] does not exist.");
             }
+
+            if (!$this->checkAuthorizationAttributes($controllerClass, $action)) {
+                return $this->response;
+            }
             
             $controller = Application::$app->container->make($controllerClass);
             if (!method_exists($controller, $action)) {
@@ -291,6 +295,113 @@ class Router
         }
 
         throw new \RuntimeException("Invalid route callback type.");
+    }
+
+    /**
+     * Scan and verify authorization attributes on the controller class and action method.
+     */
+    protected function checkAuthorizationAttributes(string $controllerClass, string $action): bool
+    {
+        $classRef = new \ReflectionClass($controllerClass);
+        $methodRef = new \ReflectionMethod($controllerClass, $action);
+
+        // Fetch required roles
+        $requiredRoles = [];
+        $classRoleAttr = $classRef->getAttributes(\App\Core\Attributes\RequireRole::class);
+        $methodRoleAttr = $methodRef->getAttributes(\App\Core\Attributes\RequireRole::class);
+
+        foreach (array_merge($classRoleAttr, $methodRoleAttr) as $attr) {
+            $instance = $attr->newInstance();
+            $requiredRoles = array_merge($requiredRoles, $instance->roles);
+        }
+
+        // Fetch required permissions
+        $requiredPermissions = [];
+        $classPermAttr = $classRef->getAttributes(\App\Core\Attributes\RequirePermission::class);
+        $methodPermAttr = $methodRef->getAttributes(\App\Core\Attributes\RequirePermission::class);
+
+        foreach (array_merge($classPermAttr, $methodPermAttr) as $attr) {
+            $instance = $attr->newInstance();
+            $requiredPermissions = array_merge($requiredPermissions, $instance->permissions);
+        }
+
+        if (empty($requiredRoles) && empty($requiredPermissions)) {
+            return true;
+        }
+
+        // Resolve authenticated user
+        $user = null;
+        if (Application::$app->container->has('auth_user')) {
+            $user = Application::$app->container->make('auth_user');
+        } else {
+            $userId = Application::$app->session->get('user_id');
+            if ($userId) {
+                $userClass = 'App\\Models\\User';
+                if (class_exists($userClass)) {
+                    try {
+                        $userModel = new $userClass();
+                        $user = $userModel->find($userId);
+                        if ($user) {
+                            Application::$app->container->singleton('auth_user', fn() => $user);
+                        }
+                    } catch (\Throwable $e) {
+                    }
+                }
+            }
+        }
+
+        if (!$user) {
+            $this->response->setStatusCode(401);
+            if ($this->request->isAjax()) {
+                $this->response->json(['error' => 'Unauthorized.'], 401);
+            } else {
+                Application::$app->session->setFlash('error', 'You must be logged in to access this page.');
+                $this->response->redirect('/login');
+            }
+            return false;
+        }
+
+        // Verify Roles
+        if (!empty($requiredRoles)) {
+            if (!method_exists($user, 'hasRole') || !$user->hasRole(...$requiredRoles)) {
+                $this->abortForbidden();
+                return false;
+            }
+        }
+
+        // Verify Permissions
+        if (!empty($requiredPermissions)) {
+            if (!method_exists($user, 'hasPermission')) {
+                $this->abortForbidden();
+                return false;
+            }
+            foreach ($requiredPermissions as $permission) {
+                if (!$user->hasPermission($permission)) {
+                    $this->abortForbidden();
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Set Response content for forbidden access.
+     */
+    protected function abortForbidden(): void
+    {
+        $this->response->setStatusCode(403);
+        if ($this->request->isAjax()) {
+            $this->response->json(['error' => 'Forbidden.'], 403);
+        } else {
+            try {
+                $rendered = Application::$app->view->render('error_403', ['message' => 'You do not have the required permissions to access this page.']);
+                $this->response->setContent($rendered);
+            } catch (\Throwable $e) {
+                $this->response->setContent("<h1>403 Forbidden</h1><p>You do not have the required permissions to access this page.</p>");
+            }
+        }
     }
 
     /**

@@ -9,6 +9,8 @@ use PDOException;
 
 class User extends Model
 {
+    use \App\Core\Traits\HasAuthorization;
+
     /**
      * Fetch user count from the database safely.
      */

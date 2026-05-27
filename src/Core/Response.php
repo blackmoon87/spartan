@@ -85,6 +85,9 @@ class Response
 
         $this->redirectUrl = $url;
         $this->setHeader('Location', $url);
+        if ($this->statusCode < 300 || $this->statusCode >= 400) {
+            $this->statusCode = 302;
+        }
     }
 
     /**

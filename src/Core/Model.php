@@ -11,6 +11,27 @@ abstract class Model
 {
     protected ?PDO  $db        = null;
     protected string $table    = '';
+    protected array $attributes = [];
+
+    public function __set(string $key, mixed $value): void
+    {
+        $this->attributes[$key] = $value;
+    }
+
+    public function __get(string $key): mixed
+    {
+        return $this->attributes[$key] ?? null;
+    }
+
+    public function __isset(string $key): bool
+    {
+        return isset($this->attributes[$key]);
+    }
+
+    public function __unset(string $key): void
+    {
+        unset($this->attributes[$key]);
+    }
 
     /**
      * Set to true to automatically manage created_at and updated_at timestamps.

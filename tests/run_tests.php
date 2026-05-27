@@ -77,21 +77,21 @@ function assert_throws(string $exceptionClass, callable $callback, string $messa
 // 3. Autoload & Bootstrap Spartan
 if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
     require_once __DIR__ . '/../vendor/autoload.php';
-} else {
-    spl_autoload_register(function (string $class): void {
-        $prefix = 'App\\';
-        $baseDir = __DIR__ . '/../src/';
-        $len = strlen($prefix);
-        if (strncmp($prefix, $class, $len) !== 0) {
-            return;
-        }
-        $relativeClass = substr($class, $len);
-        $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
-        if (file_exists($file)) {
-            require_once $file;
-        }
-    });
 }
+
+spl_autoload_register(function (string $class): void {
+    $prefix = 'App\\';
+    $baseDir = __DIR__ . '/../src/';
+    $len = strlen($prefix);
+    if (strncmp($prefix, $class, $len) !== 0) {
+        return;
+    }
+    $relativeClass = substr($class, $len);
+    $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
 require_once __DIR__ . '/../src/Core/Application.php';
 require_once __DIR__ . '/../src/Core/Database.php';
 require_once __DIR__ . '/../src/Core/Container.php';
@@ -113,6 +113,10 @@ require_once __DIR__ . '/../src/Core/Validator.php';
 require_once __DIR__ . '/../src/Core/Middleware.php';
 require_once __DIR__ . '/../src/Middlewares/SecurityHeadersMiddleware.php';
 require_once __DIR__ . '/../src/Core/Controller.php';
+require_once __DIR__ . '/../src/Core/Attributes/RequireRole.php';
+require_once __DIR__ . '/../src/Core/Attributes/RequirePermission.php';
+require_once __DIR__ . '/../src/Core/Gate.php';
+require_once __DIR__ . '/../src/Core/Traits/HasAuthorization.php';
 
 // Register PSR-4 Autoloader for Tests\Sample\ namespace
 spl_autoload_register(function (string $class): void {
@@ -177,8 +181,45 @@ try {
     $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `user_roles` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `role_permissions` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `roles` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `permissions` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `users` CASCADE");
 
     // Create schema
+    $db->exec("CREATE TABLE `users` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(255) NOT NULL,
+        `email` VARCHAR(255) UNIQUE NOT NULL,
+        `created_at` DATETIME NULL,
+        `updated_at` DATETIME NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `roles` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(255) NOT NULL,
+        `slug` VARCHAR(255) UNIQUE NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `permissions` (
+        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(255) NOT NULL,
+        `slug` VARCHAR(255) UNIQUE NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `role_permissions` (
+        `role_id` INT UNSIGNED NOT NULL,
+        `permission_id` INT UNSIGNED NOT NULL,
+        PRIMARY KEY (`role_id`, `permission_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    $db->exec("CREATE TABLE `user_roles` (
+        `user_id` INT UNSIGNED NOT NULL,
+        `role_id` INT UNSIGNED NOT NULL,
+        PRIMARY KEY (`user_id`, `role_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
     $db->exec("CREATE TABLE `test_users` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(255) NOT NULL,
@@ -1601,14 +1642,14 @@ try {
     if (file_exists($testViewFile)) {
         unlink($testViewFile);
     }
-    $cachedFile = dirname(dirname(__DIR__)) . '/storage/views/' . md5($testViewName) . '.php';
+    $cachedFile = dirname(__DIR__) . '/storage/views/' . md5($testViewName) . '.php';
     if (file_exists($cachedFile)) {
         unlink($cachedFile);
     }
 
     // 2. Route Caching Test
     $app->config['router']['cache_enabled'] = true;
-    $cacheFile = dirname(dirname(__DIR__)) . '/storage/cache/test_routes.php';
+    $cacheFile = dirname(__DIR__) . '/storage/cache/test_routes.php';
     $app->config['router']['cache_file'] = $cacheFile;
     
     if (file_exists($cacheFile)) {
@@ -1640,6 +1681,179 @@ try {
         unlink($cacheFile);
     }
 
+    // === Testing: Authorization, RBAC & Policies ===
+    test_group("Authorization, RBAC & Policies");
+
+    // 1. Setup DB Auth records
+    (new \App\Core\QueryBuilder($db, 'users'))->insert([
+        'id' => 10,
+        'name' => 'Auth Tester',
+        'email' => 'auth@test.com'
+    ]);
+
+    (new \App\Core\QueryBuilder($db, 'roles'))->insert([
+        'id' => 1,
+        'name' => 'Administrator',
+        'slug' => 'admin'
+    ]);
+    (new \App\Core\QueryBuilder($db, 'roles'))->insert([
+        'id' => 2,
+        'name' => 'Editor',
+        'slug' => 'editor'
+    ]);
+
+    (new \App\Core\QueryBuilder($db, 'permissions'))->insert([
+        'id' => 100,
+        'name' => 'Publish Post',
+        'slug' => 'publish_post'
+    ]);
+    (new \App\Core\QueryBuilder($db, 'permissions'))->insert([
+        'id' => 101,
+        'name' => 'Edit Post',
+        'slug' => 'edit_post'
+    ]);
+
+    (new \App\Core\QueryBuilder($db, 'role_permissions'))->insert([
+        'role_id' => 1,
+        'permission_id' => 100
+    ]);
+    (new \App\Core\QueryBuilder($db, 'role_permissions'))->insert([
+        'role_id' => 2,
+        'permission_id' => 101
+    ]);
+
+    // 2. Test User HasAuthorization trait
+    $user = new \App\Models\User();
+    $user->id = 10;
+    $user->name = 'Auth Tester';
+    $user->email = 'auth@test.com';
+
+    $user->assignRole('editor');
+    assert_true($user->hasRole('editor'), "User has assigned 'editor' role");
+    assert_true(!$user->hasRole('admin'), "User does not have 'admin' role");
+    assert_true($user->hasPermission('edit_post'), "User has permission 'edit_post' via 'editor' role");
+    assert_true(!$user->hasPermission('publish_post'), "User does not have permission 'publish_post' via 'editor' role");
+
+    $user->assignRole('admin');
+    assert_true($user->hasRole('admin'), "User now has 'admin' role");
+    assert_true($user->hasPermission('publish_post'), "User now has permission 'publish_post' via 'admin' role");
+
+    // 3. Test Gates & Policies
+    \App\Core\Gate::$abilities = [];
+    \App\Core\Gate::$policies = [];
+
+    \App\Core\Gate::define('access-dashboard', function(?object $user) {
+        return $user !== null && $user->hasRole('admin');
+    });
+
+    $app->container->instance('auth_user', $user);
+    $app->session->set('user_id', 10);
+
+    assert_true(\App\Core\Gate::allows('access-dashboard'), "Gate allows access-dashboard for admin user");
+    assert_true(!\App\Core\Gate::denies('access-dashboard'), "Gate denies returns false for admin user");
+
+    if (!class_exists('TestPostPolicy', false)) {
+        class TestPostPolicy {
+            public function update(?object $user, object $post) {
+                return $user !== null && (method_exists($user, 'hasRole') && $user->hasRole('admin') || $user->id === $post->user_id);
+            }
+        }
+    }
+
+    if (!class_exists('TestPost', false)) {
+        class TestPost {
+            public int $user_id;
+            public function __construct(int $userId) {
+                $this->user_id = $userId;
+            }
+        }
+    }
+
+    \App\Core\Gate::policy(TestPost::class, TestPostPolicy::class);
+
+    $post1 = new TestPost(10); // Owned by user 10 (tester)
+    $post2 = new TestPost(99); // Owned by user 99 (someone else)
+
+    assert_true(\App\Core\Gate::allows('update', $post1), "Policy allows updating owned post");
+    assert_true(\App\Core\Gate::allows('update', $post2), "Policy allows updating other's post for admin user");
+
+    $guestUser = new \App\Models\User();
+    $guestUser->id = 11;
+    $app->container->instance('auth_user', $guestUser);
+
+    assert_true(!\App\Core\Gate::allows('update', $post2), "Policy blocks updating other's post for non-admin");
+    assert_true(!\App\Core\Gate::allows('update', $post1), "Policy blocks updating post1 (owner 10) for guest user 11");
+
+    // Restore admin tester user
+    $app->container->instance('auth_user', $user);
+
+    // 4. Test Controller Action Attribute Scanner
+    if (!class_exists('TestAuthAttrController', false)) {
+        #[\App\Core\Attributes\RequireRole('editor')]
+        class TestAuthAttrController {
+            #[\App\Core\Attributes\RequirePermission('publish_post')]
+            public function publish(): string {
+                return "Published successfully";
+            }
+
+            public function edit(): string {
+                return "Edited successfully";
+            }
+        }
+    }
+
+    $tempRouter5 = new \App\Core\Router($app->request, $app->response);
+    $tempRouter5->get('/test-auth-publish', [TestAuthAttrController::class, 'publish']);
+    $tempRouter5->get('/test-auth-edit', [TestAuthAttrController::class, 'edit']);
+
+    // Test edit: requires 'editor' role (user has it)
+    $_SERVER['REQUEST_URI'] = '/test-auth-edit';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $app->request = new \App\Core\Request();
+    $tempRouter5->setRequest($app->request);
+    $app->response->reset();
+
+    $resEdit = $tempRouter5->resolve();
+    assert_equals("Edited successfully", $resEdit, "Route with class attribute allows access when user has role");
+
+    // Test publish: requires 'editor' role AND 'publish_post' permission (user has both)
+    $_SERVER['REQUEST_URI'] = '/test-auth-publish';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $app->request = new \App\Core\Request();
+    $tempRouter5->setRequest($app->request);
+    $app->response->reset();
+
+    $resPublish = $tempRouter5->resolve();
+    assert_equals("Published successfully", $resPublish, "Route with method attribute allows access when user has permission");
+
+    // Test Guest Blocked (no auth user in container, no user_id in session)
+    $app->container->forget('auth_user');
+    $app->session->remove('user_id');
+    $_SERVER['REQUEST_URI'] = '/test-auth-edit';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $app->request = new \App\Core\Request();
+    $tempRouter5->setRequest($app->request);
+    $app->response->reset();
+
+    $resBlockGuest = $tempRouter5->resolve();
+    assert_true($resBlockGuest instanceof \App\Core\Response, "Blocking guest returns Response object");
+    assert_equals(302, $resBlockGuest->getStatusCode(), "Redirect status is 302");
+    assert_equals('/login', $resBlockGuest->getRedirectUrl(), "Redirects to /login");
+
+    // Restore session
+    $app->session->set('user_id', 10);
+    $app->container->instance('auth_user', $user);
+
+    // 5. Test Blade Custom Directives
+    $viewRef = new \ReflectionMethod($app->view, 'compileString');
+    $viewRef->setAccessible(true);
+
+    $resDirectives1 = $viewRef->invoke($app->view, "@can('update', \$post)Edit @endcan");
+    assert_equals("<?php if(\App\Core\Gate::check('update', \$post)): ?>Edit <?php endif; ?>", $resDirectives1, "View compiles @can directive correctly");
+
+    $resDirectives2 = $viewRef->invoke($app->view, "@role('admin', 'editor')Admin stuff @endrole");
+    assert_equals("<?php if((\$__user = \App\Core\Gate::resolveUser()) && method_exists(\$__user, 'hasRole') && \$__user->hasRole('admin', 'editor')): ?>Admin stuff <?php endif; ?>", $resDirectives2, "View compiles @role directive correctly");
+
 } catch (\Throwable $e) {
     assert_true(false, "Logger, Dialect or FormRequest test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }
@@ -1657,6 +1871,11 @@ try {
     $db->exec("DROP TABLE IF EXISTS `clinic_invoices` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `clinic_appointments` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `clinic_patients` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `user_roles` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `role_permissions` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `roles` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `permissions` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `users` CASCADE");
     assert_true(true, "Database tables dropped and cleaned up.");
 } catch (\Throwable $e) {
     echo COLOR_RED . "Warning: Cleanup failed: " . $e->getMessage() . COLOR_RESET . "\n";
