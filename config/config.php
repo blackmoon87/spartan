@@ -66,4 +66,8 @@ return [
         'redis_password' => $_ENV['REDIS_PASSWORD'] ?? '',
         'redis_db'    => $_ENV['REDIS_DB']       ?? '0',
     ],
+    'rate_limit' => [
+        'default_limit'  => (int) ($_ENV['RATE_LIMIT_DEFAULT'] ?? 60),
+        'default_window' => (int) ($_ENV['RATE_LIMIT_WINDOW'] ?? 60),
+    ],
 ];

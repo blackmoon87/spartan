@@ -9,15 +9,18 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Cache;
 
+use App\Core\Application;
+
 class RateLimitMiddleware extends Middleware
 {
     private int $limit;
     private int $window;
 
-    public function __construct(int $limit = 60, int $window = 60)
+    public function __construct(?int $limit = null, ?int $window = null)
     {
-        $this->limit = $limit;
-        $this->window = $window;
+        $config = Application::$app->config['rate_limit'] ?? [];
+        $this->limit = $limit ?? $config['default_limit'] ?? 60;
+        $this->window = $window ?? $config['default_window'] ?? 60;
     }
 
     public function execute(Request $request, Response $response): void
