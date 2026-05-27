@@ -141,19 +141,100 @@ php worker.php --loop
 
 ### Routing
 
-```php
-// routes/web.php
-$app->router->get('/users', [UserController::class, 'index']);
-$app->router->post('/users', [UserController::class, 'store']);
-$app->router->put('/users/{id}', [UserController::class, 'update']);
-$app->router->delete('/users/{id}', [UserController::class, 'destroy']);
+Spartan features a robust, regex-based router that supports RESTful methods, route parameters, middleware piping, and form method spoofing.
 
-// With middleware
-$app->router->get('/admin', [AdminController::class, 'index'], [
-    SecurityHeadersMiddleware::class,
-    AuthMiddleware::class,
-]);
+#### 1. Defining Route Types
+Define routes in their respective files under the `routes/` directory depending on their context:
+* **Web Routes (`routes/web.php`)**: For standard browser pages (GET) and web forms (POST).
+* **Protected/Admin Routes (`routes/admin.php`)**: For routes requiring authentication or specific security checks. Attach middlewares to these routes:
+  ```php
+  $app->router->get('/admin/dashboard', [AdminController::class, 'index'], [
+      SecurityHeadersMiddleware::class,
+      AuthMiddleware::class,
+  ]);
+  ```
+* **API Routes (`routes/api.php`)**: For stateless JSON API endpoints.
+
+#### 2. Parameterized Routes
+Capture dynamic URL segments using curly braces `{param}`. These are automatically extracted and passed to your controller action as arguments:
+```php
+// Route Definition
+$app->router->get('/users/{userId}/orders/{orderId}', [UserController::class, 'showOrder']);
+
+// Controller Action
+class UserController extends Controller {
+    public function showOrder(string $userId, string $orderId) {
+        // Automatically populated from the URL segments
+    }
+}
 ```
+
+#### 3. Form Method Spoofing
+Native HTML forms only support `GET` and `POST`. To perform RESTful `PUT`, `PATCH`, or `DELETE` requests from a form, add a hidden `_method` field. The router intercepts this field and directs the request to the correct handler:
+```html
+<form method="POST" action="/orders/42">
+    <!-- CSRF Protection -->
+    @csrf 
+    <!-- Method Spoofing -->
+    <input type="hidden" name="_method" value="DELETE">
+    <button type="submit">Cancel Order</button>
+</form>
+```
+
+---
+
+### View & Backend Integration
+
+The view layer (`V`) acts as the presentation layer, integrating with the controller (`C`) by receiving structured variables, rendering layouts, and handling client-side state reactively via HTMX and Alpine.js.
+
+#### 1. Passing Variables from Backend to Frontend
+In your controller, you return a rendered template by passing an associative array containing the variables:
+```php
+class DashboardController extends Controller {
+    public function index() {
+        $stats = $this->model->getStatistics();
+        return $this->render('dashboard', [
+            'stats' => $stats,
+            'title' => 'Admin Panel'
+        ]);
+    }
+}
+```
+Behind the scenes:
+- **Native PHP Views (`.php`)**: The framework extracts the associative array into local variables using PHP's `extract()` function inside the `View` object's execution context. You print them using `$this->escape($title)` or `<?= $this->escape($title) ?>`.
+- **BladeOne Views (`.blade.php`)**: The framework delegates the compilation to the BladeOne compiler, which compiles Blade directives. You print variables using `{{ $title }}` (which is escaped by default) or `{!! $title !!}` (for raw, unescaped HTML).
+
+#### 2. Hybrid Render Methods
+* **`render($view, $data)`**: Compiles the template and wraps it inside a main layout (e.g. `layouts/main_blade.blade.php`), yielding the template content inside the `@yield('content')` block.
+* **`renderViewOnly($view, $data)`**: Compiles the template and returns only its raw HTML content without wrapping it in a layout. This is perfect for returning partial AJAX fragments to **HTMX** requests.
+
+#### 3. Frontend Interactivity (HTMX & Alpine.js Flow)
+HTMX handles server-client updates without writing complex JavaScript, while Alpine.js handles local client state.
+* **HTMX AJAX Swap**: Send a request asynchronously on keystrokes or button clicks, and swap the returned partial template directly into a DOM node:
+  ```html
+  <!-- Views/search.blade.php -->
+  <input type="text" name="query" 
+         hx-post="/search/query" 
+         hx-trigger="keyup changed delay:300ms" 
+         hx-target="#search-results" 
+         hx-include="[name=_csrf]"
+         placeholder="Type to search...">
+
+  <div id="search-results">
+      <!-- The search_results.blade.php view will be injected here -->
+  </div>
+  ```
+* **Controller handler (Backend)**: Receives the POST query, fetches filtered data, and returns only the partial view snippet:
+  ```php
+  public function searchQuery() {
+      $query = $this->request->post('query');
+      $results = (new Customer)->search($query);
+      
+      // Render ONLY the partial list view
+      return $this->renderViewOnly('search_results', ['users' => $results]);
+  }
+  ```
+
 
 ### QueryBuilder
 
