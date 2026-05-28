@@ -88,7 +88,7 @@ abstract class FormRequest extends Request
             exit;
         }
 
-        $referer = $_SERVER['HTTP_REFERER'] ?? '/';
+        $referer = $this->header('Referer') ?? '/';
         $response->redirect($referer);
         $response->send();
         exit;

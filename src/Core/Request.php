@@ -46,11 +46,36 @@ class Request
     }
 
     /**
-     * Get request HTTP method (GET, POST, etc.)
+     * Get request HTTP method (GET, POST, etc.) with support for spoofed methods.
      */
     public function getMethod(): string
     {
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        if ($method === 'POST') {
+            $spoofed = $_POST['_method'] ?? $this->getJsonParams()['_method'] ?? null;
+            if ($spoofed && in_array(strtoupper($spoofed), ['PUT', 'PATCH', 'DELETE'], true)) {
+                return strtoupper($spoofed);
+            }
+        }
+        return $method;
+    }
+
+    /**
+     * Get the real underlying request HTTP method without method spoofing.
+     */
+    public function getRealMethod(): string
+    {
         return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    }
+
+    /**
+     * Check if the request is secure (HTTPS).
+     */
+    public function isSecure(): bool
+    {
+        return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['SERVER_PORT'] ?? 80) == 443)
+            || (strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     }
 
     /**
@@ -66,7 +91,7 @@ class Request
      */
     public function isPost(): bool
     {
-        return $this->getMethod() === 'POST';
+        return $this->getRealMethod() === 'POST';
     }
 
     /**

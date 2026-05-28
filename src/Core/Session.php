@@ -4,19 +4,24 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-class Session
+class Session implements SessionInterface
 {
     protected const FLASH_KEY = 'flash_messages';
 
-    public function __construct()
+    public function __construct(?Request $request = null)
     {
         if (session_status() === PHP_SESSION_NONE) {
             // Harden the session cookie before starting the session:
             //   HttpOnly  — JavaScript (document.cookie) cannot read the session ID
             //   SameSite  — Lax prevents the cookie being sent on cross-site POST requests
             //   Secure    — Only transmit over HTTPS (auto-detected from the current request)
-            $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                    || (($_SERVER['SERVER_PORT'] ?? 80) == 443);
+            $isHttps = false;
+            if ($request !== null) {
+                $isHttps = $request->isSecure();
+            } else {
+                $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                        || (($_SERVER['SERVER_PORT'] ?? 80) == 443);
+            }
 
             session_set_cookie_params([
                 'lifetime' => 0,

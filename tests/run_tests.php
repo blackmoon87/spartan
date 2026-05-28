@@ -101,9 +101,13 @@ require_once __DIR__ . '/../src/Core/CacheDrivers/FileCacheDriver.php';
 require_once __DIR__ . '/../src/Core/CacheDrivers/RedisCacheDriver.php';
 require_once __DIR__ . '/../src/Core/Request.php';
 require_once __DIR__ . '/../src/Core/Response.php';
-require_once __DIR__ . '/../src/Core/Router.php';
+require_once __DIR__ . '/../src/Core/SessionInterface.php';
 require_once __DIR__ . '/../src/Core/Session.php';
+require_once __DIR__ . '/../src/Core/ViewInterface.php';
 require_once __DIR__ . '/../src/Core/View.php';
+require_once __DIR__ . '/../src/Core/Database/Migrator.php';
+require_once __DIR__ . '/../src/Middlewares/CsrfMiddleware.php';
+require_once __DIR__ . '/../src/Core/Router.php';
 require_once __DIR__ . '/../src/Core/EventDispatcher.php';
 require_once __DIR__ . '/../src/Core/JobQueue.php';
 require_once __DIR__ . '/../src/Core/Model.php';
@@ -517,7 +521,7 @@ class MockResponse extends \App\Core\Response {
     public int $statusCode = 200;
     public array $headers = [];
     public ?string $jsonOutput = null;
-    public ?string $redirectUrl = '';
+    public ?string $redirectUrl = null;
 
     public function setStatusCode(int $code): void {
         parent::setStatusCode($code);
@@ -540,13 +544,15 @@ class MockResponse extends \App\Core\Response {
         $this->statusCode = 200;
         $this->headers = [];
         $this->jsonOutput = null;
-        $this->redirectUrl = '';
+        $this->redirectUrl = null;
     }
 }
 
 $mockRequest = new \App\Core\Request();
 $mockResponse = new MockResponse();
 $testRouter = new \App\Core\Router($mockRequest, $mockResponse);
+$testRouter->excludeCsrf('/test-route', '/test-route/*');
+\App\Core\Application::$app->router->excludeCsrf('/test-route', '/test-route/*');
 
 // Test routes mapping
 $testRouter->get('/test-route', function () {
@@ -1064,7 +1070,9 @@ try {
 
 // 2. Test CSRF Exclusions in Router
 try {
+    $originalGlobalRouter = \App\Core\Application::$app->router;
     $tempRouter = new \App\Core\Router($app->request, $app->response);
+    \App\Core\Application::$app->router = $tempRouter;
     $tempRouter->excludeCsrf('/api/webhook', '/payment/*');
     
     // Simulate non-excluded post
@@ -1106,7 +1114,11 @@ try {
     $tempRouter->post('/payment/stripe/callback', function() { return 'payment-ok'; });
     assert_equals('payment-ok', $tempRouter->resolve(), "Router bypasses CSRF validation for wildcard excluded path matches");
 
+    \App\Core\Application::$app->router = $originalGlobalRouter;
 } catch (\Throwable $e) {
+    if (isset($originalGlobalRouter)) {
+        \App\Core\Application::$app->router = $originalGlobalRouter;
+    }
     assert_true(false, "CSRF Exclusions test failed: " . $e->getMessage());
 }
 
@@ -1817,6 +1829,87 @@ try {
 
 } catch (\Throwable $e) {
     assert_true(false, "Logger, Dialect or FormRequest test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. TEST: Refactored Core (Interfaces, Middlewares, and Migrator)
+// ─────────────────────────────────────────────────────────────────────────────
+test_group("Refactored Core Architectures");
+
+try {
+    // 1. Interface implementation verification
+    assert_true($app->session instanceof \App\Core\SessionInterface, "Application session implements SessionInterface");
+    assert_true($app->view instanceof \App\Core\ViewInterface, "Application view implements ViewInterface");
+
+    // 2. Request.php isSecure and Method Spoofing
+    $secRequest = new \App\Core\Request();
+    $_SERVER['HTTPS'] = 'on';
+    assert_true($secRequest->isSecure(), "Request detects HTTPS correctly");
+    unset($_SERVER['HTTPS']);
+
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST['_method'] = 'PUT';
+    assert_equals('PUT', $secRequest->getMethod(), "Request getMethod() returns spoofed _method");
+    assert_equals('POST', $secRequest->getRealMethod(), "Request getRealMethod() returns transport method POST");
+    unset($_POST['_method']);
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+
+    // 3. CsrfMiddleware CSRF Validation
+    $csrfMiddleware = new \App\Middlewares\CsrfMiddleware();
+    $mockReq = new \App\Core\Request();
+    $mockRes = new MockResponse();
+    
+    $_SERVER['REQUEST_URI'] = '/checkout';
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    unset($_SERVER['HTTP_X_CSRF_TOKEN']);
+    unset($_POST['_csrf']);
+    // Validate that it throws an exception on missing CSRF token
+    assert_throws(\RuntimeException::class, function () use ($csrfMiddleware, $mockReq, $mockRes) {
+        $csrfMiddleware->execute($mockReq, $mockRes);
+    }, "CsrfMiddleware throws RuntimeException on missing CSRF token");
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    unset($_SERVER['REQUEST_URI']);
+
+    // 4. Migrator Test
+    $tempMigDir = __DIR__ . '/scratch_migrations';
+    if (!is_dir($tempMigDir)) {
+        mkdir($tempMigDir, 0755, true);
+    }
+    file_put_contents($tempMigDir . '/0001_create_temp_test_table.sql', "
+        CREATE TABLE IF NOT EXISTS `temp_test_migration` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `val` VARCHAR(255) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $migrator = new \App\Core\Database\Migrator($app->db, $tempMigDir);
+    // Drop table if exists to ensure clean run
+    $app->db->exec("DROP TABLE IF EXISTS `temp_test_migration` CASCADE");
+    $app->db->exec("DROP TABLE IF EXISTS `migrations` CASCADE");
+
+    $migrator->migrate();
+
+    // Check if table exists
+    $tableExists = false;
+    try {
+        $app->db->query("SELECT 1 FROM temp_test_migration LIMIT 1");
+        $tableExists = true;
+    } catch (\Throwable $e) {}
+    assert_true($tableExists, "Migrator successfully executes migrations and creates tables");
+
+    // Check if migration logged in migrations table
+    $logged = $app->db->query("SELECT COUNT(*) FROM migrations WHERE migration = '0001_create_temp_test_table.sql'")->fetchColumn();
+    assert_equals(1, (int)$logged, "Migrator records executed migrations in the migrations table");
+
+    // Cleanup temp migration files
+    unlink($tempMigDir . '/0001_create_temp_test_table.sql');
+    rmdir($tempMigDir);
+    $app->db->exec("DROP TABLE IF EXISTS `temp_test_migration` CASCADE");
+    $app->db->exec("DROP TABLE IF EXISTS `migrations` CASCADE");
+
+} catch (\Throwable $e) {
+    assert_true(false, "Refactored Core test failed: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 }
 
 

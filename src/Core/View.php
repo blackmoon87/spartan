@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-class View
+class View implements ViewInterface
 {
     private string $layout = 'main';
     private string $viewsPath;

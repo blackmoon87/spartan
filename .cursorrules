@@ -6,6 +6,7 @@ You are assisting a developer in a custom, lightweight, modern PHP MVC boilerpla
 > **CRITICAL RULE FOR AI CODE GENERATION:**
 > Never code based on generic framework assumptions (such as Laravel, Symfony, or Yii defaults). You MUST strictly adhere to the custom Spartan API.
 > - **Zero-Dependency Core (Optional vendor/)**: The core framework is designed to run 100% on native PHP with a custom built-in autoloader. However, external composer packages are fully supported and can be utilized or recommended if a feature or test specifically requires specialized external libraries.
+> - **Code to Interfaces**: Always use `SessionInterface` and `ViewInterface` contracts instead of concrete classes when referring to the session and view layers to keep them decoupled.
 > - **No Generic Helpers**: Do NOT use helper functions like `view()`, `request()`, `response()`, `redirect()`, `session()`, `env()`, or `config()` unless they are explicitly defined in Spartan's core.
 > - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_FILES`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions (e.g. `$request->file('avatar')` to retrieve uploaded files).
 > - **No Native Redirects/Headers**: Never call `header("Location: ...")` or `http_response_code()`. Always route redirects and status codes through the `Response` object.
@@ -19,6 +20,9 @@ Follow these specifications and structural rules when writing, refactoring, or g
 ```
 ├── config/
 │   └── config.php          # Main config loader (loads .env parameters)
+├── database/               # Database migrations and seed files
+│   ├── migrations/        # SQL migration files executed in sequence
+│   └── seed.sql           # Database seeding queries
 ├── public/
 │   ├── .htaccess           # URL rewrites to index.php
 │   └── index.php           # Front Controller — loads route files only
@@ -37,6 +41,8 @@ Follow these specifications and structural rules when writing, refactoring, or g
 │   │   ├── Container.php        # Service Container (DI)
 │   │   ├── Controller.php       # Base Controller
 │   │   ├── Database.php         # PDO connection singleton
+│   │   ├── Database/
+│   │   │   └── Migrator.php     # DDL/DML Migration Engine
 │   │   ├── EventDispatcher.php  # Synchronous event system
 │   │   ├── Middleware.php       # Route middleware abstraction
 │   │   ├── Model.php            # Base Model
@@ -44,13 +50,16 @@ Follow these specifications and structural rules when writing, refactoring, or g
 │   │   ├── Request.php          # HTTP Request handler
 │   │   ├── Response.php         # HTTP Response handler
 │   │   ├── Router.php           # Router (regex matcher)
-│   │   ├── Session.php          # Session & Flash messages
+│   │   ├── Session.php          # Session implementation
+│   │   ├── SessionInterface.php # Session contract interface
 │   │   ├── Validator.php        # Input validation rules engine
-│   │   └── View.php             # View compiler
+│   │   ├── View.php             # View compiler implementation
+│   │   └── ViewInterface.php    # View contract interface
 │   ├── Controllers/        # App Controllers (Extend App\Core\Controller)
 │   ├── Events/             # Event name constants
 │   ├── Listeners/          # Event listener classes (must implement handle())
 │   ├── Middlewares/        # Route Middlewares (Extend App\Core\Middleware)
+│   │   └── CsrfMiddleware.php # Global CSRF verification middleware
 │   ├── Models/             # App Models (Extend App\Core\Model)
 │   ├── Services/           # Business logic services (no extends required)
 │   └── Views/              # View templates
@@ -61,6 +70,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
 │   └── cache/              # File cache storage (auto-created)
 ├── .env                    # Environment variables
 ├── composer.json           # Composer PSR-4 namespaces
+├── spartan                 # Command line runner for database & worker operations
 └── README.md               # Setup and development guide
 ```
 
@@ -82,7 +92,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
   - **No Output escaping inside Core/Request**: Inputs are read raw to prevent encoding corruption. Output escaping is done exclusively in Views.
 - **Security Rules (all mandatory)**:
   - **XSS**: Every variable echoed inside a View or Layout MUST be escaped. Use `{{ $var }}` or `@escape($var)` in Blade templates, and `$this->escape($var)` in native PHP templates. Raw `echo $var` or `<?= $var ?>` without escaping is forbidden.
-  - **CSRF**: Every HTML `<form method="POST">` MUST contain CSRF protection. Use `@csrf` in Blade templates, or `<?= $this->csrfToken() ?>` in native PHP templates. The Router validates all POST requests automatically across form, AJAX, and JSON bodies.
+  - **CSRF**: Every HTML `<form method="POST">` MUST contain CSRF protection. Use `@csrf` in Blade templates, or `<?= $this->csrfToken() ?>` in native PHP templates. The global `CsrfMiddleware` validates all state-changing POST requests automatically (across form, AJAX, and JSON bodies) unless explicitly excluded.
   - **Session Fixation**: `$this->session->regenerate()` MUST be called immediately after every successful login or role/privilege change. Never skip this.
   - **Session Cookie**: Session is automatically started with `HttpOnly=true`, `SameSite=Lax`, and `Secure` (auto-detected). Never call `session_start()` manually outside of `Session::__construct()`.
   - **View Path Safety**: Never pass user-controlled input directly to `$this->render()`. View names are whitelisted to `[a-zA-Z0-9_/]` only. Path traversal attempts (`../../`) throw an `InvalidArgumentException`.
@@ -216,7 +226,7 @@ $this->table('orders')
   </form>
   ```
   The Router detects `_method` on POST requests and routes to the correct handler. CSRF is still enforced (real transport is POST).
-- **CSRF Exclusions**: To exclude specific stateless routes (like payment webhooks or API endpoints) from central CSRF checks, register them in route files using `$app->router->excludeCsrf()`:
+- **CSRF Exclusions**: To exclude specific stateless routes (like payment webhooks or API endpoints) from `CsrfMiddleware` checks, register them in route files using `$app->router->excludeCsrf()`:
   ```php
   $app->router->excludeCsrf(
       '/api/stripe/webhook',
@@ -464,17 +474,16 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
 
 ### Async Jobs & Queue
 - **Rule**: Any listener that calls an external API, sends SMS/Email, or generates a file MUST be registered with `async: true`.
-- **Prerequisites**: Run `storage/jobs.sql` once to create the `jobs` table.
-- **Worker**: Process pending jobs via CLI:
+- **Worker**: Process pending jobs via the `spartan` console CLI tool:
   ```bash
   # Single pass — run once and exit (for Cron, every minute)
-  php worker.php
+  php spartan worker
 
   # Loop mode — poll every 5 seconds (for development / daemon)
-  php worker.php --loop
+  php spartan worker --loop
 
   # Cron example:
-  # * * * * * php /var/www/project/worker.php >> /var/log/worker.log 2>&1
+  # * * * * * php /var/www/project/spartan worker >> /var/log/worker.log 2>&1
   ```
 - **Failure behaviour**:
   - `onFailure: 'retry'` — retries with exponential backoff: attempt 2 → +1 min, attempt 3+ → +5 min.
@@ -482,6 +491,21 @@ $orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
 - **Fallback guarantee**: If the DB is unavailable when dispatching, async listeners fall back to sync execution automatically (logged to error_log). The request never silently drops events.
 - **`maxAttempts`** minimum is 1. Setting it to 1 with `onFailure: 'retry'` is equivalent to `onFailure: 'stop'`.
 - **Callable listeners are always sync** — async requires a class name string.
+
+### CLI Tool & Database Migrations
+- **CLI Commands**: Standard CLI tasks are executed using the root `spartan` console tool.
+  ```bash
+  # Run pending migrations in database/migrations/
+  php spartan migrate
+
+  # Seed database using database/seed.sql
+  php spartan db:seed
+
+  # Start the background worker for async events
+  php spartan worker [--loop]
+  ```
+- **Migrations Structure**: Database schema definitions live under `database/migrations/` as sequenced SQL files (e.g. `0001_create_jobs_table.sql`).
+- **Dialect Portability**: Write migration SQL using standard MySQL syntax. The `Migrator` automatically translates dialect structures (such as auto-increment and default values) when resolving queries on SQLite connections during testing.
 
 ### Middleware & Rate Limiting
 - **Rule**: Middlewares inspect and filter incoming HTTP requests. They can abort request resolution early (e.g. on redirects, authorization failure, or rate limiting) to bypass executing controller callbacks.

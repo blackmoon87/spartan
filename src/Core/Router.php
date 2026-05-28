@@ -12,6 +12,7 @@ class Router
     protected array $middlewareGroups = [];
     protected array $csrfExclusions = [];
     protected array $middlewareAliases = [];
+    protected array $globalMiddlewares = [];
 
     public function __construct(Request $request, Response $response)
     {
@@ -21,6 +22,11 @@ class Router
         $this->middlewareAliases = [
             'auth' => \App\Middlewares\AuthMiddleware::class,
             'rate_limit' => \App\Middlewares\RateLimitMiddleware::class,
+            'csrf' => \App\Middlewares\CsrfMiddleware::class,
+        ];
+
+        $this->globalMiddlewares = [
+            \App\Middlewares\CsrfMiddleware::class,
         ];
     }
 
@@ -54,6 +60,14 @@ class Router
     public function excludeCsrf(string ...$paths): void
     {
         $this->csrfExclusions = array_merge($this->csrfExclusions, $paths);
+    }
+
+    /**
+     * Get CSRF exclusions.
+     */
+    public function getCsrfExclusions(): array
+    {
+        return $this->csrfExclusions;
     }
 
     /**
@@ -120,17 +134,6 @@ class Router
         $path   = $this->request->getPath();
         $method = $this->request->getMethod();
 
-        // HTML form method spoofing: forms can only send GET/POST.
-        // Add <input type="hidden" name="_method" value="PUT"> to spoof PUT/PATCH/DELETE.
-        // AJAX/fetch clients send the real method and are unaffected.
-        // CSRF is still enforced because the real transport is POST.
-        if ($method === 'POST' && isset($_POST['_method'])) {
-            $spoofed = strtoupper(trim($_POST['_method']));
-            if (in_array($spoofed, ['PUT', 'PATCH', 'DELETE'], true)) {
-                $method = $spoofed;
-            }
-        }
-
         $routeData = $this->routes[$method][$path] ?? false;
         $params = [];
 
@@ -154,27 +157,9 @@ class Router
             return Application::$app->view->render('error_404', ['message' => 'The page you requested was not found.']);
         }
 
-        // 1. Central CSRF Protection check for all state-changing POST requests
-        $isExcluded = false;
-        foreach ($this->csrfExclusions as $excludedPath) {
-            $pattern = str_replace('\*', '.*', preg_quote($excludedPath, '#'));
-            if (preg_match('#^' . $pattern . '$#', $path)) {
-                $isExcluded = true;
-                break;
-            }
-        }
-
-        if ($method === 'POST' && !$isExcluded && !$this->request->validateCsrf()) {
-            $this->response->setStatusCode(403);
-            if ($this->request->isAjax()) {
-                $this->response->json(['error' => 'Invalid or expired CSRF token.'], 403);
-                return $this->response;
-            }
-            throw new \RuntimeException("CSRF token validation failed.");
-        }
-
-        // 2. Execute Middlewares
-        $resolvedMiddlewares = $this->resolveMiddlewares($routeData['middlewares']);
+        // Execute Middlewares (prepend global middlewares)
+        $allMiddlewares = array_merge($this->globalMiddlewares, $routeData['middlewares']);
+        $resolvedMiddlewares = $this->resolveMiddlewares($allMiddlewares);
         foreach ($resolvedMiddlewares as $middlewareInfo) {
             $middlewareClass = $middlewareInfo['class'];
             $args = $middlewareInfo['args'];
@@ -189,7 +174,7 @@ class Router
             }
         }
 
-        // 3. Execute Callback
+        // Execute Callback
         return $this->executeCallback($routeData['callback'], $params);
     }
 

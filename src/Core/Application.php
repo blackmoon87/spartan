@@ -16,8 +16,8 @@ class Application
     public Router    $router;
     public Request   $request;
     public Response  $response;
-    public View      $view;
-    public Session   $session;
+    public ViewInterface     $view;
+    public SessionInterface  $session;
     public Container       $container;
     public EventDispatcher $events;
     public ?\PDO $db = null;
@@ -40,8 +40,8 @@ class Application
         $this->container->singleton(Logger::class, fn() => $this->logger);
 
         $this->events    = new EventDispatcher();
-        $this->session   = new Session();
         $this->request   = new Request();
+        $this->session   = new Session($this->request);
         $this->response  = new Response();
         $this->view      = new View();
         $this->router    = new Router($this->request, $this->response);
