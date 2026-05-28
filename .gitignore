@@ -27,3 +27,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Uploads
+/public/uploads/
+/tests/sample_project/public/uploads/

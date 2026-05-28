@@ -11,6 +11,11 @@
         <!-- Left Side: Post Detail & Comments list -->
         <div>
             <div class="card" style="padding: 2.5rem;">
+                @if (!empty($post->cover_image))
+                    <div style="margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; max-height: 350px; border: 1px solid var(--border-color);">
+                        <img src="{{ asset($post->cover_image) }}" alt="{{ $post->title }}" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                @endif
                 <h1 style="font-size: 2.2rem; font-weight: 800; margin-bottom: 1rem; line-height: 1.2; color: #f3f4f6;">{{ $post->title }}</h1>
                 <p style="font-size: 1.1rem; color: #d1d5db; white-space: pre-line; line-height: 1.7;">{{ $post->body }}</p>
             </div>
@@ -18,12 +23,19 @@
             @can('update', $post)
                 <div class="card" style="border: 1px solid rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.02); margin-top: 1rem;">
                     <h2 style="font-size: 1.3rem; margin-bottom: 1rem; color: #fbbf24;">Edit Post Content</h2>
-                    <form method="POST" action="{{ url('/post/' . $post->id) }}">
+                    <form method="POST" action="{{ url('/post/' . $post->id) }}" enctype="multipart/form-data">
                         @csrf
                         <input type="hidden" name="_method" value="PUT">
                         <div style="margin-bottom: 1rem;">
                             <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Title</label>
                             <input type="text" name="title" value="{{ $post->title }}" required style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Cover Image</label>
+                            <input type="file" name="cover_image" accept="image/*" style="width: 100%; box-sizing: border-box; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px; color: var(--text-color);">
+                            @if (!empty($post->cover_image))
+                                <small style="color: var(--text-secondary); display: block; margin-top: 0.3rem;">Current cover image: {{ $post->cover_image }}</small>
+                            @endif
                         </div>
                         <div style="margin-bottom: 1.5rem;">
                             <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Content</label>

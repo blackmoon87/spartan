@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `posts` (
     `title` VARCHAR(255) NOT NULL,
     `slug` VARCHAR(255) NOT NULL UNIQUE,
     `body` TEXT NOT NULL,
+    `cover_image` VARCHAR(255) NULL,
     `created_at` DATETIME NULL,
     `updated_at` DATETIME NULL,
     FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE

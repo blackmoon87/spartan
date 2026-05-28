@@ -26,6 +26,11 @@
                     @if (count($posts) > 0)
                         @foreach ($posts as $post)
                             <div class="post-item">
+                                @if (!empty($post['cover_image']))
+                                    <div style="margin-bottom: 1rem; border-radius: 8px; overflow: hidden; max-height: 200px; border: 1px solid var(--border-color);">
+                                        <img src="{{ asset($post['cover_image']) }}" alt="{{ $post['title'] }}" style="width: 100%; height: 100%; object-fit: cover;">
+                                    </div>
+                                @endif
                                 <h3 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 1.25rem;">
                                     <a href="{{ url('/blog/' . $post['slug']) }}" style="color: #60a5fa; text-decoration: none; transition: color 0.2s;">
                                         {{ $post['title'] }}
@@ -75,11 +80,15 @@
                     <h2 style="font-size: 1.4rem; margin-bottom: 0.5rem; color: #f3f4f6;">Publish Post</h2>
                     <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Share a new story with the world as <strong>{{ \App\Core\Application::$app->session->get('user_name') }}</strong>.</p>
                     
-                    <form method="POST" action="{{ url('/post') }}">
+                    <form method="POST" action="{{ url('/post') }}" enctype="multipart/form-data">
                         @csrf
                         <div style="margin-bottom: 1rem;">
                             <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Title</label>
                             <input type="text" name="title" required placeholder="Catchy title..." style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Cover Image</label>
+                            <input type="file" name="cover_image" accept="image/*" style="width: 100%; box-sizing: border-box; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px; color: var(--text-color);">
                         </div>
                         <div style="margin-bottom: 1.5rem;">
                             <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Content</label>

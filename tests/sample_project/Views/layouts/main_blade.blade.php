@@ -205,6 +205,16 @@
             </div>
         @endif
 
+        @if ($errors = \App\Core\Application::$app->session->getFlash('validation_errors'))
+            <div class="alert alert-danger" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 2rem; font-weight: 500; animation: fadeIn 0.25s ease;">
+                <ul style="margin: 0; padding-left: 1.25rem;">
+                    @foreach ($errors as $field => $message)
+                        <li>{{ is_array($message) ? implode(', ', $message) : $message }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <main>
             @yield('content')
         </main>

@@ -254,13 +254,13 @@ try {
         `bio` TEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    // Create blogger tables
     $db->exec("CREATE TABLE `posts` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT UNSIGNED NOT NULL,
         `title` VARCHAR(255) NOT NULL,
         `slug` VARCHAR(255) NOT NULL UNIQUE,
         `body` TEXT NOT NULL,
+        `cover_image` VARCHAR(255) NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE

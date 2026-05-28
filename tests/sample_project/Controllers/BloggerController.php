@@ -37,7 +37,7 @@ class BloggerController extends Controller
         $posts = Cache::remember('homepage_posts_cache', 60, function () use ($postModel) {
             return $postModel->table('posts')
                 ->join('users', 'posts.user_id', '=', 'users.id')
-                ->select('posts.id', 'posts.user_id', 'posts.title', 'posts.slug', 'posts.body', 'posts.created_at', 'users.name as author_name')
+                ->select('posts.id', 'posts.user_id', 'posts.title', 'posts.slug', 'posts.body', 'posts.cover_image', 'posts.created_at', 'users.name as author_name')
                 ->orderBy('posts.created_at', 'DESC')
                 ->get();
         });
@@ -144,12 +144,42 @@ class BloggerController extends Controller
         $data = $request->getBody();
         $userId = auth()->id();
 
+        $coverImagePath = null;
+        $file = $request->file('cover_image');
+        if ($file && $file['error'] === UPLOAD_ERR_OK && !empty($file['tmp_name'])) {
+            if ($file['size'] > 2 * 1024 * 1024) {
+                $this->session->setFlash('validation_errors', ['cover_image' => 'The cover image size must not exceed 2MB.']);
+                $this->redirect('/');
+                return;
+            }
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!in_array($file['type'], $allowedTypes, true)) {
+                $this->session->setFlash('validation_errors', ['cover_image' => 'The cover image must be a valid image file (JPEG, PNG, GIF, WEBP).']);
+                $this->redirect('/');
+                return;
+            }
+
+            $uploadsDir = dirname(__DIR__) . '/public/uploads';
+            if (!is_dir($uploadsDir)) {
+                mkdir($uploadsDir, 0755, true);
+            }
+
+            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $filename = bin2hex(random_bytes(8)) . '.' . $extension;
+            $destination = $uploadsDir . '/' . $filename;
+
+            if (move_uploaded_file($file['tmp_name'], $destination)) {
+                $coverImagePath = '/uploads/' . $filename;
+            }
+        }
+
         $postModel = new Post();
         $postId = $postModel->create([
-            'user_id' => (int)$userId,
-            'title'   => $data['title'],
-            'slug'    => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
-            'body'    => $data['body'],
+            'user_id'     => (int)$userId,
+            'title'       => $data['title'],
+            'slug'        => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
+            'body'        => $data['body'],
+            'cover_image' => $coverImagePath,
         ]);
 
         // Dispatch a mock published event
@@ -185,10 +215,47 @@ class BloggerController extends Controller
         }
 
         $data = $request->getBody();
+        $coverImagePath = $post->cover_image ?? null;
+        $file = $request->file('cover_image');
+        if ($file && $file['error'] === UPLOAD_ERR_OK && !empty($file['tmp_name'])) {
+            if ($file['size'] > 2 * 1024 * 1024) {
+                $this->session->setFlash('validation_errors', ['cover_image' => 'The cover image size must not exceed 2MB.']);
+                $this->redirect('/');
+                return;
+            }
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!in_array($file['type'], $allowedTypes, true)) {
+                $this->session->setFlash('validation_errors', ['cover_image' => 'The cover image must be a valid image file (JPEG, PNG, GIF, WEBP).']);
+                $this->redirect('/');
+                return;
+            }
+
+            $uploadsDir = dirname(__DIR__) . '/public/uploads';
+            if (!is_dir($uploadsDir)) {
+                mkdir($uploadsDir, 0755, true);
+            }
+
+            if ($coverImagePath) {
+                $oldFile = dirname(__DIR__) . '/public' . $coverImagePath;
+                if (file_exists($oldFile)) {
+                    unlink($oldFile);
+                }
+            }
+
+            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $filename = bin2hex(random_bytes(8)) . '.' . $extension;
+            $destination = $uploadsDir . '/' . $filename;
+
+            if (move_uploaded_file($file['tmp_name'], $destination)) {
+                $coverImagePath = '/uploads/' . $filename;
+            }
+        }
+
         $postModel->table()->where('id', $id)->update([
-            'title' => $data['title'],
-            'slug'  => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
-            'body'  => $data['body'],
+            'title'       => $data['title'],
+            'slug'        => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
+            'body'        => $data['body'],
+            'cover_image' => $coverImagePath,
         ]);
 
         // Invalidate Cache
@@ -223,6 +290,13 @@ class BloggerController extends Controller
             $this->response->setStatusCode(403);
             echo "You are not authorized to delete this post.";
             exit;
+        }
+
+        if ($post->cover_image) {
+            $file = dirname(__DIR__) . '/public' . $post->cover_image;
+            if (file_exists($file)) {
+                unlink($file);
+            }
         }
 
         $postModel->table()->where('id', $id)->delete();
