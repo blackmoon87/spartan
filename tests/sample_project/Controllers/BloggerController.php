@@ -148,7 +148,7 @@ class BloggerController extends Controller
         $postId = $postModel->create([
             'user_id' => (int)$userId,
             'title'   => $data['title'],
-            'slug'    => slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
+            'slug'    => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
             'body'    => $data['body'],
         ]);
 
@@ -187,7 +187,7 @@ class BloggerController extends Controller
         $data = $request->getBody();
         $postModel->table()->where('id', $id)->update([
             'title' => $data['title'],
-            'slug'  => slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
+            'slug'  => $this->slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
             'body'  => $data['body'],
         ]);
 
@@ -333,5 +333,18 @@ class BloggerController extends Controller
         return $this->renderViewOnly('blog/search_results', [
             'posts' => $posts
         ]);
+    }
+
+    /**
+     * Generate URL-safe slug.
+     */
+    private function slugify(string $text): string
+    {
+        $text = preg_replace('~[^\pL\d]+~u', '-', $text);
+        $text = preg_replace('~[^-\w]+~', '', $text);
+        $text = trim($text, '-');
+        $text = preg_replace('~-+~', '-', $text);
+        $text = mb_strtolower($text, 'UTF-8');
+        return empty($text) ? 'n-a' : $text;
     }
 }
