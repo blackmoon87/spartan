@@ -18,6 +18,7 @@ class Application
     public Response  $response;
     public ViewInterface     $view;
     public SessionInterface  $session;
+    public AuthInterface     $auth;
     public Container       $container;
     public EventDispatcher $events;
     public ?\PDO $db = null;
@@ -42,9 +43,13 @@ class Application
         $this->events    = new EventDispatcher();
         $this->request   = new Request();
         $this->session   = new Session($this->request);
+        $this->auth      = new Auth($this->session);
         $this->response  = new Response();
         $this->view      = new View();
         $this->router    = new Router($this->request, $this->response);
+
+        // Register AuthInterface in container
+        $this->container->singleton(AuthInterface::class, fn() => $this->auth);
 
         // Boot cache driver
         Cache::boot($config['cache'] ?? []);

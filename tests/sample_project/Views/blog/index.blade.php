@@ -32,10 +32,24 @@
                                     </a>
                                 </h3>
                                 <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 1rem;">{{ $post['body'] }}</p>
-                                <div class="post-meta" style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.85rem; color: #9ca3af;">
-                                    <span>By: <strong style="color: #f3f4f6;">{{ $post['author']['name'] ?? 'Anonymous' }}</strong></span>
-                                    <span>•</span>
-                                    <span>Comments: {{ count($post['comments'] ?? []) }}</span>
+                                <div class="post-meta" style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.85rem; color: #9ca3af; justify-content: space-between;">
+                                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                        <span>By: <strong style="color: #f3f4f6;">{{ $post['author_name'] ?? 'Anonymous' }}</strong></span>
+                                        <span>•</span>
+                                        <span>Comments: {{ count($post['comments'] ?? []) }}</span>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                        @can('update', $post)
+                                            <a href="{{ url('/post/' . $post['id']) }}" style="color: #fbbf24; text-decoration: none; font-size: 0.8rem; border: 1px solid rgba(251, 191, 36, 0.3); padding: 0.15rem 0.5rem; border-radius: 4px;">Edit</a>
+                                        @endcan
+                                        @can('delete', $post)
+                                            <form action="{{ url('/post/' . $post['id']) }}" method="POST" style="display: inline; margin: 0;" onsubmit="return confirm('Are you sure you want to delete this post?');">
+                                                @csrf
+                                                <input type="hidden" name="_method" value="DELETE">
+                                                <button type="submit" style="color: #ef4444; background: none; border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer; line-height: 1.2;">Delete</button>
+                                            </form>
+                                        @endcan
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
@@ -48,6 +62,13 @@
 
         <!-- Right Side: Sidebar (Auth Control & Metadata) -->
         <div>
+            @role('admin')
+                <div class="card" style="border: 1px solid rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.05); margin-bottom: 1rem;">
+                    <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem; color: #a78bfa; display: flex; align-items: center; gap: 0.5rem;">Admin Status</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Logged in as <strong>Administrator</strong>. Override policy rules active.</p>
+                </div>
+            @endrole
+
             @if (\App\Core\Application::$app->session->get('user_id'))
                 <!-- Create Post Form (Logged In) -->
                 <div class="card">

@@ -103,6 +103,8 @@ require_once __DIR__ . '/../src/Core/Request.php';
 require_once __DIR__ . '/../src/Core/Response.php';
 require_once __DIR__ . '/../src/Core/SessionInterface.php';
 require_once __DIR__ . '/../src/Core/Session.php';
+require_once __DIR__ . '/../src/Core/AuthInterface.php';
+require_once __DIR__ . '/../src/Core/Auth.php';
 require_once __DIR__ . '/../src/Core/ViewInterface.php';
 require_once __DIR__ . '/../src/Core/View.php';
 require_once __DIR__ . '/../src/Core/Database/Migrator.php';
@@ -139,6 +141,7 @@ spl_autoload_register(function (string $class): void {
 
 // Load config & initialize App
 $config = require __DIR__ . '/../config/config.php';
+$config['auth']['model'] = \Tests\Sample\Models\User::class;
 $_SERVER['REQUEST_URI'] = '/';
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SESSION = []; // clean session mock
@@ -168,6 +171,7 @@ try {
 }
 
 $app = new \App\Core\Application($config);
+\App\Core\Cache::flush();
 
 // 4. SETUP TEMPORARY TEST TABLES
 test_group("Database Setup");
@@ -178,6 +182,8 @@ try {
     }
     
     // Drop old test tables to ensure fresh state
+    $db->exec("DROP TABLE IF EXISTS `comments` CASCADE");
+    $db->exec("DROP TABLE IF EXISTS `posts` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `blogger_comments` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `blogger_posts` CASCADE");
     $db->exec("DROP TABLE IF EXISTS `test_profiles` CASCADE");
@@ -195,6 +201,7 @@ try {
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(255) NOT NULL,
         `email` VARCHAR(255) UNIQUE NOT NULL,
+        `password` VARCHAR(255) NOT NULL DEFAULT '',
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
@@ -248,25 +255,25 @@ try {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
     // Create blogger tables
-    $db->exec("CREATE TABLE `blogger_posts` (
+    $db->exec("CREATE TABLE `posts` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT UNSIGNED NOT NULL,
         `title` VARCHAR(255) NOT NULL,
         `body` TEXT NOT NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
-        FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    $db->exec("CREATE TABLE `blogger_comments` (
+    $db->exec("CREATE TABLE `comments` (
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `post_id` INT UNSIGNED NOT NULL,
         `user_id` INT UNSIGNED NOT NULL,
         `content` TEXT NOT NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
-        FOREIGN KEY(post_id) REFERENCES blogger_posts(id) ON DELETE CASCADE,
-        FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
+        FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
     // Copy jobs schema but naming it `test_jobs` for isolated run
@@ -283,6 +290,13 @@ try {
         `run_at`       DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `created_at`   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+    // Seed default roles
+    $db->exec("INSERT INTO `roles` (name, slug) VALUES 
+        ('Administrator', 'admin'),
+        ('Editor', 'editor'),
+        ('User', 'user')
+    ");
 
     assert_true(true, "Database tables created successfully.");
 } catch (\Throwable $e) {
@@ -395,6 +409,7 @@ $qb = new \App\Core\QueryBuilder($app->db, 'test_users');
 // Test Insert
 $id = $qb->insert(['name' => 'Charlie', 'email' => 'charlie@mail.com']);
 assert_true((int)$id > 0, "QueryBuilder inserts rows and returns auto-increment IDs");
+$app->db->exec("INSERT INTO `users` (id, name, email, password) VALUES ({$id}, 'Charlie', 'charlie@mail.com', 'password123')");
 
 // Test Select/Where
 $user = (new \App\Core\QueryBuilder($app->db, 'test_users'))
@@ -863,6 +878,8 @@ if (!function_exists('simulate_mvc_request')) {
 $csrfToken = bin2hex(random_bytes(32));
 $app->session->set('_csrf_token', $csrfToken);
 
+\App\Core\Gate::policy(\Tests\Sample\Models\Post::class, \Tests\Sample\Policies\PostPolicy::class);
+
 // Seed a post for Charlie Modified so GET / has data
 $charlie = (new \Tests\Sample\Models\User())->table()->where('email', 'charlie@mail.com')->first();
 if ($charlie) {
@@ -903,6 +920,7 @@ assert_true(str_contains($app->session->getFlash('success_message', ''), 'create
 
 $user = (new \Tests\Sample\Models\User())->table()->where('email', 'mvc@integration.com')->first();
 assert_true(!empty($user), "MVC model stores record into database successfully");
+$app->session->set('user_id', (int)$user['id']);
 
 // 4. UPDATE: Test PUT /post/{id} update
 $postModel = new \Tests\Sample\Models\Post();
@@ -1636,6 +1654,11 @@ try {
     test_group("Authorization, RBAC & Policies");
 
     // 1. Setup DB Auth records
+    $db->exec("DELETE FROM `user_roles` WHERE 1=1");
+    $db->exec("DELETE FROM `role_permissions` WHERE 1=1");
+    $db->exec("DELETE FROM `roles` WHERE 1=1");
+    $db->exec("DELETE FROM `permissions` WHERE 1=1");
+
     (new \App\Core\QueryBuilder($db, 'users'))->insert([
         'id' => 10,
         'name' => 'Auth Tester',

@@ -16,3 +16,10 @@ if (!function_exists('asset')) {
         return url($path);
     }
 }
+
+if (!function_exists('auth')) {
+    function auth(): \App\Core\AuthInterface
+    {
+        return \App\Core\Application::$app->auth;
+    }
+}

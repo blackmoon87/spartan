@@ -99,21 +99,8 @@ class Gate
             return Application::$app->container->make('auth_user');
         }
 
-        $userId = Application::$app->session->get('user_id');
-        if ($userId) {
-            $userClass = 'App\\Models\\User';
-            if (class_exists($userClass)) {
-                try {
-                    $userModel = new $userClass();
-                    $user = $userModel->findInstance($userId);
-                    if ($user) {
-                        Application::$app->container->instance('auth_user', $user);
-                        return $user;
-                    }
-                } catch (\Throwable $e) {
-                    // Fail gracefully if DB connection or table is not ready during test boot
-                }
-            }
+        if (Application::$app->container->has(AuthInterface::class)) {
+            return Application::$app->container->make(AuthInterface::class)->user();
         }
 
         return null;

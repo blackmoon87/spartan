@@ -6,12 +6,25 @@ namespace Tests\Sample\Controllers;
 
 use App\Core\Controller;
 use App\Core\Cache;
+use App\Core\Gate;
 use Tests\Sample\Models\User;
 use Tests\Sample\Models\Post;
 use Tests\Sample\Models\Comment;
+use Tests\Sample\Services\AnalyticsService;
+use Tests\Sample\Controllers\Requests\StorePostRequest;
+use Tests\Sample\Controllers\Requests\StoreCommentRequest;
+use Tests\Sample\Events\CommentPostedEvent;
 
 class BloggerController extends Controller
 {
+    /**
+     * Constructor Injection of AnalyticsService.
+     */
+    public function __construct(private AnalyticsService $analytics)
+    {
+        parent::__construct();
+    }
+
     /**
      * Display the posts index.
      */
@@ -20,27 +33,39 @@ class BloggerController extends Controller
         $postModel = new Post();
         $userModel = new User();
 
-        // 1. Fetch Posts and eager load their Authors
-        $posts = $postModel->table()->get();
-        $postsWithAuthors = $postModel->author()->loadFor($posts, 'author');
+        // 1. Fetch Posts and eager load their Authors using query cache and dialect-aware joins
+        $posts = Cache::remember('homepage_posts_cache', 60, function () use ($postModel) {
+            return $postModel->table('posts')
+                ->join('users', 'posts.user_id', '=', 'users.id')
+                ->select('posts.id', 'posts.user_id', 'posts.title', 'posts.body', 'posts.created_at', 'users.name as author_name')
+                ->orderBy('posts.created_at', 'DESC')
+                ->get();
+        });
 
-        // 2. Eager load comments as well
-        $postsWithAuthors = $postModel->comments()->loadFor($postsWithAuthors, 'comments');
+        // 2. Eager load comments
+        $postsWithComments = $postModel->comments()->loadFor($posts, 'comments');
+        
+        // Eager load authors for each comment
+        $commentModel = new Comment();
+        foreach ($postsWithComments as &$p) {
+            if (!empty($p['comments'])) {
+                $p['comments'] = $commentModel->author()->loadFor($p['comments'], 'author');
+            }
+        }
+        unset($p);
 
         // 3. Fetch all registered users
         $users = $userModel->table()->get();
 
-        // 4. Cache statistics for 10 seconds
-        $stats = Cache::remember('blog_stats', 10, function () use ($postModel) {
-            $totalPosts = $postModel->table()->count();
-            return [
-                'total_posts' => $totalPosts,
-                'generated_at' => date('H:i:s'),
-            ];
-        });
+        // 4. Container DI stats
+        $stats = [
+            'total_posts' => $this->analytics->getPostCount(),
+            'total_comments' => $this->analytics->getCommentCount(),
+            'generated_at' => date('H:i:s'),
+        ];
 
         return $this->render('blog/index', [
-            'posts' => $postsWithAuthors,
+            'posts' => $postsWithComments,
             'users' => $users,
             'stats' => $stats,
             'errors' => $this->session->getFlash('validation_errors', []),
@@ -66,7 +91,7 @@ class BloggerController extends Controller
         $commentModel = new Comment();
         $commentsWithAuthors = $commentModel->author()->loadFor($comments, 'author');
 
-        // Fetch all registered users to select author in comments
+        // Fetch all registered users
         $userModel = new User();
         $users = $userModel->table()->get();
 
@@ -82,28 +107,11 @@ class BloggerController extends Controller
     /**
      * Store a new blog post.
      */
-    public function storePost(): void
+    public function storePost(StorePostRequest $request): void
     {
-        $userId = $this->session->get('user_id');
-        if (!$userId) {
-            $this->session->setFlash('validation_errors', ['auth' => 'You must be logged in to publish a post.']);
-            $this->redirect('/login');
-            return;
-        }
-
-        $data = $this->request->getBody();
-
-        $v = $this->validate($data, [
-            'title'   => 'required|string|min:3',
-            'body'    => 'required|string|min:5',
-        ]);
-
-        if ($v->fails()) {
-            $this->session->setFlash('validation_errors', $v->errors());
-            $this->session->setFlash('old_input', $data);
-            $this->redirect('/');
-            return;
-        }
+        // Validation & Authorization are handled automatically by StorePostRequest
+        $data = $request->getBody();
+        $userId = auth()->id();
 
         $postModel = new Post();
         $postId = $postModel->create([
@@ -115,7 +123,8 @@ class BloggerController extends Controller
         // Dispatch a mock published event
         $this->event('post.published', ['post_id' => $postId, 'title' => $data['title']]);
 
-        Cache::forget('blog_stats');
+        // Invalidate Cache
+        Cache::forget('homepage_posts_cache');
 
         $this->session->setFlash('success_message', "Post created successfully!");
         $this->redirect('/');
@@ -124,26 +133,33 @@ class BloggerController extends Controller
     /**
      * Update an existing post (PUT request).
      */
-    public function updatePost(int $id): void
+    public function updatePost(int $id, StorePostRequest $request): void
     {
-        $data = $this->request->getBody();
+        // Validation & Authorization are handled automatically by StorePostRequest
+        $postModel = new Post();
+        $post = $postModel->findInstance($id);
 
-        $v = $this->validate($data, [
-            'title' => 'required|string|min:3',
-            'body'  => 'required|string|min:5',
-        ]);
-
-        if ($v->fails()) {
-            $this->session->setFlash('validation_errors', $v->errors());
-            $this->redirect('/');
-            return;
+        if (!$post) {
+            $this->response->setStatusCode(404);
+            echo "Post not found";
+            exit;
         }
 
-        $postModel = new Post();
+        // Check authorization policy
+        if (Gate::denies('update', $post)) {
+            $this->response->setStatusCode(403);
+            echo "You are not authorized to update this post.";
+            exit;
+        }
+
+        $data = $request->getBody();
         $postModel->table()->where('id', $id)->update([
             'title' => $data['title'],
             'body'  => $data['body'],
         ]);
+
+        // Invalidate Cache
+        Cache::forget('homepage_posts_cache');
 
         $this->session->setFlash('success_message', "Post updated successfully!");
         $this->redirect('/');
@@ -154,10 +170,32 @@ class BloggerController extends Controller
      */
     public function destroyPost(int $id): void
     {
+        if (!auth()->check()) {
+            $this->session->setFlash('validation_errors', ['auth' => 'You must be logged in to delete a post.']);
+            $this->redirect('/login');
+            return;
+        }
+
         $postModel = new Post();
+        $post = $postModel->findInstance($id);
+
+        if (!$post) {
+            $this->response->setStatusCode(404);
+            echo "Post not found";
+            exit;
+        }
+
+        // Check authorization policy
+        if (Gate::denies('delete', $post)) {
+            $this->response->setStatusCode(403);
+            echo "You are not authorized to delete this post.";
+            exit;
+        }
+
         $postModel->table()->where('id', $id)->delete();
 
-        Cache::forget('blog_stats');
+        // Invalidate Cache
+        Cache::forget('homepage_posts_cache');
 
         $this->session->setFlash('success_message', "Post deleted successfully.");
         $this->redirect('/');
@@ -166,38 +204,29 @@ class BloggerController extends Controller
     /**
      * Store a comment for a post.
      */
-    public function storeComment(int $id): void
+    public function storeComment(int $id, StoreCommentRequest $request): void
     {
-        $data = $this->request->getBody();
+        // Validation & Authorization are handled automatically by StoreCommentRequest
+        $data = $request->getBody();
 
-        $userId = $this->session->get('user_id');
+        $userId = auth()->id();
         if (!$userId) {
-            // Fallback for test suite
-            if (isset($data['user_id'])) {
-                $userId = (int)$data['user_id'];
-            } else {
-                $this->session->setFlash('validation_errors', ['auth' => 'You must be logged in to leave a comment.']);
-                $this->redirect("/post/{$id}");
-                return;
-            }
-        }
-
-        $v = $this->validate($data, [
-            'content' => 'required|string|min:3',
-        ]);
-
-        if ($v->fails()) {
-            $this->session->setFlash('validation_errors', $v->errors());
-            $this->redirect("/post/{$id}");
-            return;
+            // Fallback for testing suite or guests (use sample author user ID 2)
+            $userId = isset($data['user_id']) ? (int)$data['user_id'] : 2;
         }
 
         $commentModel = new Comment();
-        $commentModel->create([
+        $commentId = $commentModel->create([
             'post_id' => $id,
             'user_id' => (int)$userId,
             'content' => $data['content'],
         ]);
+
+        // Dispatch background async event
+        $comment = $commentModel->find($commentId);
+        if ($comment) {
+            $this->event(CommentPostedEvent::class, $comment);
+        }
 
         $this->session->setFlash('success_message', "Comment added successfully!");
         $this->redirect("/post/{$id}");
@@ -213,7 +242,7 @@ class BloggerController extends Controller
         // Validate unique email
         $v = $this->validate($data, [
             'name'  => 'required|string|min:3',
-            'email' => 'required|email|unique:test_users,email',
+            'email' => 'required|email|unique:users,email',
         ]);
 
         if ($v->fails()) {
@@ -229,6 +258,14 @@ class BloggerController extends Controller
             'email' => $data['email'],
             'password' => password_hash('password123', PASSWORD_BCRYPT),
         ]);
+
+        // Assign default 'user' role
+        if ($userId) {
+            $user = $userModel->findInstance($userId);
+            if ($user) {
+                $user->assignRole('user');
+            }
+        }
 
         $this->session->setFlash('success_message', "User created successfully!");
         $this->redirect('/');
@@ -254,7 +291,7 @@ class BloggerController extends Controller
         if (trim($query) === '') {
             $posts = [];
         } else {
-            $posts = $postModel->table()
+            $posts = $postModel->table('posts')
                 ->where('title', '%' . $query . '%', 'LIKE')
                 ->orWhere('body', '%' . $query . '%', 'LIKE')
                 ->get();

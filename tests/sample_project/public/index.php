@@ -70,88 +70,85 @@ $app = new Application($config);
 // Override views path to point to sample project views
 $app->view->setViewsPath(dirname(__DIR__) . '/Views');
 
-// Auto-migration check: Create sample tables if they do not exist
+// Register Policies
+\App\Core\Gate::policy(\Tests\Sample\Models\Post::class, \Tests\Sample\Policies\PostPolicy::class);
+
+// Resolve and bind auth_user in container
+$userId = $app->session->get('user_id');
+if ($userId) {
+    try {
+        $user = (new \Tests\Sample\Models\User())->findInstance($userId);
+        if ($user) {
+            $app->container->instance('auth_user', $user);
+            $app->view->share('authUser', $user);
+        }
+    } catch (\Throwable $e) {
+        // DB not ready yet during initial migration
+    }
+}
+
+// Register Event Listeners
+$app->events->listen(
+    \Tests\Sample\Events\CommentPostedEvent::class,
+    \Tests\Sample\Listeners\NotifyPostOwner::class,
+    async: true
+);
+
+// Auto-migration check: Run pending migrations if not exists
 if ($app->db !== null) {
     try {
-        $tablesExist = false;
-        try {
-            $app->db->query("SELECT 1 FROM test_users LIMIT 1");
-            $tablesExist = true;
-        } catch (\Throwable $e) {
-            // Tables do not exist
-        }
+        $migrator = new \App\Core\Database\Migrator($app->db);
+        $migrator->migrate();
 
-        if (!$tablesExist) {
-            $driver = $app->db->getAttribute(PDO::ATTR_DRIVER_NAME);
-            if ($driver === 'sqlite') {
-                $app->db->exec("CREATE TABLE IF NOT EXISTS test_users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    email TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NULL,
-                    updated_at TEXT NULL
-                );");
-                $app->db->exec("CREATE TABLE IF NOT EXISTS blogger_posts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    body TEXT NOT NULL,
-                    created_at TEXT NULL,
-                    updated_at TEXT NULL,
-                    FOREIGN KEY(user_id) REFERENCES test_users(id)
-                );");
-                $app->db->exec("CREATE TABLE IF NOT EXISTS blogger_comments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    post_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TEXT NULL,
-                    updated_at TEXT NULL,
-                    FOREIGN KEY(post_id) REFERENCES blogger_posts(id) ON DELETE CASCADE,
-                    FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
-                );");
-            } else {
-                // MySQL
-                $app->db->exec("CREATE TABLE IF NOT EXISTS `test_users` (
-                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    `name` VARCHAR(255) NOT NULL,
-                    `email` VARCHAR(255) UNIQUE NOT NULL,
-                    `password` VARCHAR(255) NOT NULL DEFAULT '',
-                    `created_at` DATETIME NULL,
-                    `updated_at` DATETIME NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-                $app->db->exec("CREATE TABLE IF NOT EXISTS `blogger_posts` (
-                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    `user_id` INT UNSIGNED NOT NULL,
-                    `title` VARCHAR(255) NOT NULL,
-                    `body` TEXT NOT NULL,
-                    `created_at` DATETIME NULL,
-                    `updated_at` DATETIME NULL,
-                    FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-                $app->db->exec("CREATE TABLE IF NOT EXISTS `blogger_comments` (
-                    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    `post_id` INT UNSIGNED NOT NULL,
-                    `user_id` INT UNSIGNED NOT NULL,
-                    `content` TEXT NOT NULL,
-                    `created_at` DATETIME NULL,
-                    `updated_at` DATETIME NULL,
-                    FOREIGN KEY(post_id) REFERENCES blogger_posts(id) ON DELETE CASCADE,
-                    FOREIGN KEY(user_id) REFERENCES test_users(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        // Seed default roles, permissions, and users if users table is empty
+        $stmt = $app->db->query("SELECT COUNT(*) FROM `users`");
+        $userCount = (int)($stmt->fetchColumn() ?: 0);
+        if ($userCount === 0) {
+            // Seed default roles & permissions
+            $seedFile = dirname(dirname(dirname(__DIR__))) . '/database/seed.sql';
+            if (file_exists($seedFile)) {
+                $seedSql = file_get_contents($seedFile);
+                $driver = $app->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+                if ($driver === 'sqlite') {
+                    $seedSql = preg_replace('/ON DUPLICATE KEY UPDATE[^;]+/i', '', $seedSql);
+                    $seedSql = str_ireplace('INSERT INTO', 'INSERT OR IGNORE INTO', $seedSql);
+                }
+                $queries = array_filter(array_map('trim', explode(';', $seedSql)));
+                foreach ($queries as $query) {
+                    if ($query !== '') {
+                        $app->db->exec($query);
+                    }
+                }
             }
-            
-            // Seed default user
+
+            // Seed users & assign roles
             $hashedPassword = password_hash('password123', PASSWORD_BCRYPT);
             $now = date('Y-m-d H:i:s');
-            $stmt = $app->db->prepare("INSERT INTO test_users (name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute(['Sample Author', 'author@mail.com', $hashedPassword, $now, $now]);
+
+            $stmtUser = $app->db->prepare("INSERT INTO users (name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
+            
+            // System Admin User
+            $stmtUser->execute(['System Admin', 'admin@mail.com', $hashedPassword, $now, $now]);
+            $adminId = $app->db->lastInsertId();
+
+            // Sample Author User
+            $stmtUser->execute(['Sample Author', 'author@mail.com', $hashedPassword, $now, $now]);
             $authorId = $app->db->lastInsertId();
 
-            // Seed default post
-            if ($authorId) {
-                $stmtPost = $app->db->prepare("INSERT INTO blogger_posts (user_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
+            if ($adminId && $authorId) {
+                // Fetch roles
+                $adminRole = $app->db->query("SELECT id FROM roles WHERE slug = 'admin'")->fetchColumn();
+                $userRole = $app->db->query("SELECT id FROM roles WHERE slug = 'user'")->fetchColumn();
+
+                if ($adminRole) {
+                    $app->db->exec("INSERT INTO user_roles (user_id, role_id) VALUES ({$adminId}, {$adminRole})");
+                }
+                if ($userRole) {
+                    $app->db->exec("INSERT INTO user_roles (user_id, role_id) VALUES ({$authorId}, {$userRole})");
+                }
+
+                // Seed first welcome post
+                $stmtPost = $app->db->prepare("INSERT INTO posts (user_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
                 $stmtPost->execute([(int)$authorId, 'Welcome to Spartan Blogger', 'This is the very first blog post on this amazing Spartan framework.', $now, $now]);
             }
         }

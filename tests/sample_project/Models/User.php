@@ -6,10 +6,13 @@ namespace Tests\Sample\Models;
 
 use App\Core\Model;
 use App\Core\RelationQuery;
+use App\Core\Traits\HasAuthorization;
 
 class User extends Model
 {
-    protected string $table = 'test_users';
+    use HasAuthorization;
+
+    protected string $table = 'users';
     protected bool $timestamps = true;
 
     /**

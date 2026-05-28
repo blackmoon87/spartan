@@ -15,6 +15,27 @@
                 <p style="font-size: 1.1rem; color: #d1d5db; white-space: pre-line; line-height: 1.7;">{{ $post->body }}</p>
             </div>
 
+            @can('update', $post)
+                <div class="card" style="border: 1px solid rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.02); margin-top: 1rem;">
+                    <h2 style="font-size: 1.3rem; margin-bottom: 1rem; color: #fbbf24;">Edit Post Content</h2>
+                    <form method="POST" action="{{ url('/post/' . $post->id) }}">
+                        @csrf
+                        <input type="hidden" name="_method" value="PUT">
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Title</label>
+                            <input type="text" name="title" value="{{ $post->title }}" required style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Post Content</label>
+                            <textarea name="body" required rows="5" style="width: 100%; box-sizing: border-box; resize: vertical;">{{ $post->body }}</textarea>
+                        </div>
+                        <button type="submit" style="width: 100%; padding: 0.75rem; font-weight: 600; background: #fbbf24; color: #0b0f19; border: none; cursor: pointer; transition: all 0.2s;">
+                            Save Changes
+                        </button>
+                    </form>
+                </div>
+            @endcan
+
             <div class="card">
                 <h2 style="font-size: 1.4rem; margin-bottom: 1rem; color: #f3f4f6;">Comments ({{ count($comments) }})</h2>
                 <div id="comments-section">

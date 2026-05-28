@@ -16,7 +16,7 @@ class AuthController extends Controller
     public function login(): string
     {
         // Redirect to home if already logged in
-        if ($this->session->get('user_id')) {
+        if (auth()->check()) {
             $this->response->redirect('/');
             return '';
         }
@@ -75,7 +75,7 @@ class AuthController extends Controller
     public function register(): string
     {
         // Redirect to home if already logged in
-        if ($this->session->get('user_id')) {
+        if (auth()->check()) {
             $this->response->redirect('/');
             return '';
         }

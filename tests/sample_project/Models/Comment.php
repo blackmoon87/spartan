@@ -9,7 +9,7 @@ use App\Core\RelationQuery;
 
 class Comment extends Model
 {
-    protected string $table = 'blogger_comments';
+    protected string $table = 'comments';
     protected bool $timestamps = true;
 
     /**

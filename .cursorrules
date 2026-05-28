@@ -6,7 +6,7 @@ You are assisting a developer in a custom, lightweight, modern PHP MVC boilerpla
 > **CRITICAL RULE FOR AI CODE GENERATION:**
 > Never code based on generic framework assumptions (such as Laravel, Symfony, or Yii defaults). You MUST strictly adhere to the custom Spartan API.
 > - **Zero-Dependency Core (Optional vendor/)**: The core framework is designed to run 100% on native PHP with a custom built-in autoloader. However, external composer packages are fully supported and can be utilized or recommended if a feature or test specifically requires specialized external libraries.
-> - **Code to Interfaces**: Always use `SessionInterface` and `ViewInterface` contracts instead of concrete classes when referring to the session and view layers to keep them decoupled.
+> - **Code to Interfaces**: Always use `SessionInterface`, `ViewInterface`, and `AuthInterface` contracts instead of concrete classes when referring to session, view, and authentication layers to keep them decoupled.
 > - **No Generic Helpers**: Do NOT use helper functions like `view()`, `request()`, `response()`, `redirect()`, `session()`, `env()`, or `config()` unless they are explicitly defined in Spartan's core.
 > - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_FILES`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions (e.g. `$request->file('avatar')` to retrieve uploaded files).
 > - **No Native Redirects/Headers**: Never call `header("Location: ...")` or `http_response_code()`. Always route redirects and status codes through the `Response` object.
@@ -313,6 +313,13 @@ $this->table('orders')
 - **After login or any privilege change**: ALWAYS call `$this->session->regenerate()` to prevent session fixation.
 - Create a flash message for the next request cycle: `$this->session->setFlash('status', 'Saved successfully!')`.
 - Display flash messages in Views using `$this->flash('status')`.
+
+### Authentication (`Auth`)
+- **Accessing Auth**: Use the global `auth()` helper function or the `$this->auth` property in Controllers (type-hinted to `AuthInterface`).
+- **Check Auth Status**: Use `auth()->check()` to see if a user is currently logged in.
+- **Get Authenticated User ID**: Use `auth()->id()` to retrieve the logged-in user's primary key.
+- **Get User Model Instance**: Use `auth()->user()` to get the fully-hydrated user model instance (cached in-memory, automatically re-fetched if the session `user_id` changes).
+- **User Model Configuration**: The resolved class is loaded dynamically from `$app->config['auth']['model']` (e.g. `App\Models\User`).
 
 ### Service Container
 - Register services in `routes/web.php` or `public/index.php` after `$app` is instantiated:

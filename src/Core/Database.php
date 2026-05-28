@@ -19,9 +19,12 @@ class Database
     /**
      * Get the PDO database connection instance.
      */
-    public static function getInstance(array $config): PDO
+    public static function getInstance(?array $config = null): PDO
     {
         if (self::$instance === null) {
+            if ($config === null) {
+                $config = \App\Core\Application::$app ? \App\Core\Application::$app->config['db'] : [];
+            }
             $connection = $config['connection'] ?? 'mysql';
 
             if ($connection === 'sqlite') {

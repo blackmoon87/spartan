@@ -80,4 +80,7 @@ return [
         'cache_enabled' => ($_ENV['ROUTE_CACHE_ENABLED'] ?? 'false') === 'true',
         'cache_file'    => $_ENV['ROUTE_CACHE_FILE'] ?? dirname(__DIR__) . '/storage/cache/routes.php',
     ],
+    'auth' => [
+        'model' => 'App\\Models\\User',
+    ],
 ];

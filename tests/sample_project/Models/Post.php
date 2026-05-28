@@ -9,7 +9,7 @@ use App\Core\RelationQuery;
 
 class Post extends Model
 {
-    protected string $table = 'blogger_posts';
+    protected string $table = 'posts';
     protected bool $timestamps = true;
 
     /**
