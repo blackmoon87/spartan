@@ -1215,6 +1215,19 @@ try {
     assert_true(false, "Model Transaction Helper test failed: " . $e->getMessage());
 }
 
+// 4b. Test Model findInstanceBy
+try {
+    $userModel = new TestUser();
+    $foundUser = $userModel->findInstanceBy('email', 'shouldexisttrans@example.com');
+    assert_true($foundUser instanceof TestUser, "findInstanceBy returns hydrated Model instance");
+    assert_equals('Should Exist Transaction', $foundUser->name, "findInstanceBy retrieves correct column data");
+    
+    $nonExistent = $userModel->findInstanceBy('email', 'nonexistent@example.com');
+    assert_true($nonExistent === null, "findInstanceBy returns null on non-existent record");
+} catch (\Throwable $e) {
+    assert_true(false, "Model findInstanceBy test failed: " . $e->getMessage());
+}
+
 // 5. Test Controller Dependency Injection
 class DummyDIService {
     public function getValue(): string { return 'resolved-service-value'; }
