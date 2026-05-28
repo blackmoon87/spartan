@@ -23,21 +23,3 @@ if (!function_exists('auth')) {
         return \App\Core\Application::$app->auth;
     }
 }
-
-if (!function_exists('slugify')) {
-    function slugify(string $text): string
-    {
-        // Replace non-letters/digits by -
-        $text = preg_replace('~[^\pL\d]+~u', '-', $text);
-        // Remove unwanted characters
-        $text = preg_replace('~[^-\w]+~', '', $text);
-        // Trim hyphens
-        $text = trim($text, '-');
-        // Remove duplicate hyphens
-        $text = preg_replace('~-+~', '-', $text);
-        // Lowercase
-        $text = mb_strtolower($text, 'UTF-8');
-
-        return empty($text) ? 'n-a' : $text;
-    }
-}
