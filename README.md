@@ -300,6 +300,20 @@ $this->table()->where('id', $id)->update(['status' => 'active']);
 $this->table()->where('id', $id)->delete();
 ```
 
+### Models & Hydration
+
+Models return hydrated object instances instead of raw arrays when using finding helpers:
+
+```php
+// Find record by primary key ID and return hydrated Model instance
+$user = (new User)->findInstance(1);
+echo $user->name;
+
+// Find record by any unique column (e.g. slug) and return hydrated Model instance
+$post = (new Post)->findInstanceBy('slug', 'welcome-to-spartan-blogger');
+echo $post->title;
+```
+
 ### Model Relationships
 
 ```php

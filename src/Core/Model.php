@@ -120,6 +120,23 @@ abstract class Model
     }
 
     /**
+     * Find a record by a custom column and return a hydrated Model instance.
+     */
+    public function findInstanceBy(string $column, mixed $value): ?static
+    {
+        $row = $this->table()->where($column, $value)->first();
+        if (!$row) {
+            return null;
+        }
+
+        $instance = new static();
+        foreach ($row as $key => $val) {
+            $instance->$key = $val;
+        }
+        return $instance;
+    }
+
+    /**
      * Retrieve all records belonging to the model's table.
      */
     public function all(): array

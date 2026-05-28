@@ -138,6 +138,7 @@ $this->table()->where('active', 1)->get();                  // filtered
 $this->table()->where('role', 'admin')->first();            // first match or null
 $this->table()->find($id);                                  // by primary key (returns raw database ?array)
 (new User())->findInstance($id);                            // by primary key (returns hydrated ?Model object instance)
+(new User())->findInstanceBy('slug', $slug);               // by custom column (returns hydrated ?Model object instance)
 $this->table()->where('status', 'paid')->count();           // count
 $this->table()->where('active', 1)->exists();              // boolean
 
