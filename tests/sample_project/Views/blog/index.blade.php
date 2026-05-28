@@ -27,7 +27,7 @@
                         @foreach ($posts as $post)
                             <div class="post-item">
                                 <h3 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 1.25rem;">
-                                    <a href="{{ url('/post/' . $post['id']) }}" style="color: #60a5fa; text-decoration: none; transition: color 0.2s;">
+                                    <a href="{{ url('/blog/' . $post['slug']) }}" style="color: #60a5fa; text-decoration: none; transition: color 0.2s;">
                                         {{ $post['title'] }}
                                     </a>
                                 </h3>

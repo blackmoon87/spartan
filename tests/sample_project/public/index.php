@@ -148,8 +148,8 @@ if ($app->db !== null) {
                 }
 
                 // Seed first welcome post
-                $stmtPost = $app->db->prepare("INSERT INTO posts (user_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
-                $stmtPost->execute([(int)$authorId, 'Welcome to Spartan Blogger', 'This is the very first blog post on this amazing Spartan framework.', $now, $now]);
+                $stmtPost = $app->db->prepare("INSERT INTO posts (user_id, title, slug, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmtPost->execute([(int)$authorId, 'Welcome to Spartan Blogger', 'welcome-to-spartan-blogger', 'This is the very first blog post on this amazing Spartan framework.', $now, $now]);
             }
         }
     } catch (\Throwable $e) {

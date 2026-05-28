@@ -37,7 +37,7 @@ class BloggerController extends Controller
         $posts = Cache::remember('homepage_posts_cache', 60, function () use ($postModel) {
             return $postModel->table('posts')
                 ->join('users', 'posts.user_id', '=', 'users.id')
-                ->select('posts.id', 'posts.user_id', 'posts.title', 'posts.body', 'posts.created_at', 'users.name as author_name')
+                ->select('posts.id', 'posts.user_id', 'posts.title', 'posts.slug', 'posts.body', 'posts.created_at', 'users.name as author_name')
                 ->orderBy('posts.created_at', 'DESC')
                 ->get();
         });
@@ -105,6 +105,37 @@ class BloggerController extends Controller
     }
 
     /**
+     * Show a single post and its comments by slug.
+     */
+    public function showBySlug(string $slug): string
+    {
+        $postModel = new Post();
+        $post = $postModel->findInstanceBy('slug', $slug);
+
+        if (!$post) {
+            $this->response->setStatusCode(404);
+            return "Post not found";
+        }
+
+        // Fetch comments and load authors
+        $comments = $post->comments()->for(['id' => $post->id]);
+        $commentModel = new Comment();
+        $commentsWithAuthors = $commentModel->author()->loadFor($comments, 'author');
+
+        // Fetch all registered users
+        $userModel = new User();
+        $users = $userModel->table()->get();
+
+        return $this->render('blog/show', [
+            'post' => $post,
+            'comments' => $commentsWithAuthors,
+            'users' => $users,
+            'errors' => $this->session->getFlash('validation_errors', []),
+            'old' => $this->session->getFlash('old_input', []),
+        ]);
+    }
+
+    /**
      * Store a new blog post.
      */
     public function storePost(StorePostRequest $request): void
@@ -117,6 +148,7 @@ class BloggerController extends Controller
         $postId = $postModel->create([
             'user_id' => (int)$userId,
             'title'   => $data['title'],
+            'slug'    => slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
             'body'    => $data['body'],
         ]);
 
@@ -155,6 +187,7 @@ class BloggerController extends Controller
         $data = $request->getBody();
         $postModel->table()->where('id', $id)->update([
             'title' => $data['title'],
+            'slug'  => slugify($data['title']) . '-' . bin2hex(random_bytes(2)),
             'body'  => $data['body'],
         ]);
 

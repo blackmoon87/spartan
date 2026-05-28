@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `posts` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL,
     `title` VARCHAR(255) NOT NULL,
+    `slug` VARCHAR(255) NOT NULL UNIQUE,
     `body` TEXT NOT NULL,
     `created_at` DATETIME NULL,
     `updated_at` DATETIME NULL,

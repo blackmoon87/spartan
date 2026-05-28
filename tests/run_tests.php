@@ -259,6 +259,7 @@ try {
         `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT UNSIGNED NOT NULL,
         `title` VARCHAR(255) NOT NULL,
+        `slug` VARCHAR(255) NOT NULL UNIQUE,
         `body` TEXT NOT NULL,
         `created_at` DATETIME NULL,
         `updated_at` DATETIME NULL,
@@ -886,6 +887,7 @@ if ($charlie) {
     (new \Tests\Sample\Models\Post())->create([
         'user_id' => $charlie['id'],
         'title' => 'First Post by Charlie Modified',
+        'slug' => 'first-post-by-charlie-modified',
         'body' => 'This is a test post body.'
     ]);
 }
@@ -927,6 +929,7 @@ $postModel = new \Tests\Sample\Models\Post();
 $postId = $postModel->create([
     'user_id' => (int)$user['id'],
     'title'   => 'Initial Title',
+    'slug'    => 'initial-title',
     'body'    => 'Initial post body content here'
 ]);
 
@@ -957,6 +960,7 @@ assert_true($deletedPost === null, "MVC DELETE successfully removes record from 
 (new \Tests\Sample\Models\Post())->create([
     'user_id' => (int)$user['id'],
     'title'   => 'Searchable Post Title',
+    'slug'    => 'searchable-post-title',
     'body'    => 'Searchable body content'
 ]);
 
@@ -1011,6 +1015,7 @@ $authorId = (int)$author['id'];
 $postId = $postModel->create([
     'user_id' => $authorId,
     'title' => 'Blogger Integration Test Post',
+    'slug' => 'blogger-integration-test-post',
     'body' => 'This is a detailed post about the Spartan framework.'
 ]);
 assert_true(is_numeric($postId), "Post created successfully and returned ID");
