@@ -103,6 +103,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
   - **Open Redirect**: Never pass user-supplied input directly to `$this->redirect()`. Always validate or whitelist the target URL first.
   - **Debug Mode**: Never hardcode `display_errors = 1`. Error visibility is controlled exclusively by the `APP_DEBUG` key in `.env`.
   - **DB Testing**: Use `Database::swapInstance($mockPdo)` to inject a test double in test suites. Use `Database::reset()` between tests.
+  - **Lazy DB Connections**: `Application::$app->db` is lazy-loaded and boots on the first access. Do not assume an active database connection exists at bootstrap phase.
   - **Validation**: Never write raw `isset()` / `empty()` / `filter_var()` validation chains inside Controllers. Always use `$this->validate($data, $rules)`.
 
 ---
@@ -130,6 +131,7 @@ Follow these specifications and structural rules when writing, refactoring, or g
 ### Models
 - Create models under `src/Models/` and extend `App\Core\Model`.
 - Always declare the table property: `protected string $table = 'my_table';`.
+- **Retrieving Table Names**: Avoid using Reflection or accessing the protected property directly. Always use `$model->getTable()` to retrieve a model's table name, keeping relationships and queries highly optimized.
 - **NEVER write raw SQL strings inside model methods.** Use the QueryBuilder instead.
 - Access the QueryBuilder via `$this->table()` (uses model's own table) or `$this->table('other_table')`.
 

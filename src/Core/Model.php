@@ -54,6 +54,14 @@ abstract class Model
     }
 
     /**
+     * Get the database table name associated with the model.
+     */
+    public function getTable(): string
+    {
+        return $this->table;
+    }
+
+    /**
      * Helper to prepare and execute SQL statements safely.
      * Declared protected to enforce that SQL logic remains strictly inside Models,
      * protecting it from leaking into Controllers or Views.
@@ -319,11 +327,8 @@ abstract class Model
             );
         }
 
-        // Resolve related table without instantiating (read protected property via Reflection)
-        $reflector    = new \ReflectionClass($relatedClass);
-        $tableProp    = $reflector->getProperty('table');
-        $tableProp->setAccessible(true);
-        $relatedTable = $tableProp->getValue(new $relatedClass());
+        // Resolve related table without Reflection
+        $relatedTable = (new $relatedClass())->getTable();
 
         if (empty($relatedTable)) {
             throw new RuntimeException(

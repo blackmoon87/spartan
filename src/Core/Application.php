@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+/**
+ * App Orchestrator
+ * 
+ * @property \PDO|null $db Database connection instance
+ */
 class Application
 {
     /**
@@ -21,7 +26,7 @@ class Application
     public AuthInterface     $auth;
     public Container       $container;
     public EventDispatcher $events;
-    public ?\PDO $db = null;
+    private ?\PDO $dbInstance = null;
     public array $config;
 
     public function __construct(array $config)
@@ -58,15 +63,6 @@ class Application
         if (!$this->session->get('_csrf_token')) {
             $this->session->set('_csrf_token', bin2hex(random_bytes(32)));
         }
-
-        // Connect database if configurations are provided
-        if (!empty($config['db']['database'])) {
-            try {
-                $this->db = Database::getInstance($config['db']);
-            } catch (\PDOException $e) {
-                error_log("Database connection failed during boot: " . $e->getMessage());
-            }
-        }
     }
 
     public function run(): void
@@ -93,5 +89,44 @@ class Application
             // Automatically clean flash messages at the end of execution
             $this->session->removeFlashMessages();
         }
+    }
+
+    /**
+     * Magic getter to support lazy-loading of the database connection.
+     */
+    public function __get(string $name)
+    {
+        if ($name === 'db') {
+            if ($this->dbInstance === null && !empty($this->config['db']['database'])) {
+                try {
+                    $this->dbInstance = Database::getInstance($this->config['db']);
+                } catch (\PDOException $e) {
+                    error_log("Database connection failed during lazy boot: " . $e->getMessage());
+                }
+            }
+            return $this->dbInstance;
+        }
+        return null;
+    }
+
+    /**
+     * Magic setter to allow swapping the db instance (useful in tests).
+     */
+    public function __set(string $name, mixed $value): void
+    {
+        if ($name === 'db') {
+            $this->dbInstance = $value;
+        }
+    }
+
+    /**
+     * Magic isset to check if database is connected or configured.
+     */
+    public function __isset(string $name): bool
+    {
+        if ($name === 'db') {
+            return $this->db !== null;
+        }
+        return false;
     }
 }
