@@ -82,16 +82,28 @@ composer dump-autoload
 php -S localhost:8000 -t public
 ```
 
-### 4. Async Queue (optional)
+### 4. Database Migrations & Seeds (optional)
 
-Run `storage/jobs.sql` in your database, then start the worker:
+Run database migrations and seed default roles and permissions:
+
+```bash
+# Run migrations
+php spartan migrate
+
+# Seed database
+php spartan db:seed
+```
+
+### 5. Async Queue (optional)
+
+Start the worker via the CLI runner:
 
 ```bash
 # Single pass (use with Cron — every minute)
-php worker.php
+php spartan worker
 
 # Continuous loop (development / daemon)
-php worker.php --loop
+php spartan worker --loop
 ```
 
 ---
@@ -310,7 +322,7 @@ $user = (new User)->findInstance(1);
 echo $user->name;
 
 // Find record by any unique column (e.g. slug) and return hydrated Model instance
-$post = (new Post)->findInstanceBy('slug', 'welcome-to-spartan-blogger');
+$post = (new Post)->findInstanceBy('slug', 'my-first-post');
 echo $post->title;
 ```
 
