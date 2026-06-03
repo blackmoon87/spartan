@@ -14,6 +14,7 @@ Custom lightweight PHP 8.1+ MVC framework. Zero external dependencies in core. C
 | `header("Location: ...")`, `http_response_code()` | `$this->redirect()`, `$this->response->setStatusCode()` |
 | Raw `echo $var`, `<?= $var ?>` without escaping | `{{ $var }}` / `@escape($var)` / `$this->escape($var)` |
 | SQL strings inside Controllers or Views | All SQL stays in Models via `$this->table()->...` |
+| `Application::$app->db`, models, or any DB call inside View files | Pass data from Controller via `$this->render('view', ['key' => $value])` |
 | Hardcoded paths, credentials, or env-specific values | `.env` → `config/config.php` → `Application::$app->config` |
 | `session_start()` manually | Session auto-starts in `Session::__construct()` |
 | `isset()`/`empty()`/`filter_var()` validation chains in Controllers | `$this->validate($data, $rules)` |
