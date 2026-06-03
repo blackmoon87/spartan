@@ -105,6 +105,9 @@ Upload path: `Application::$app->config['storage']['uploads']` — never hardcod
 
 ## Models & QueryBuilder
 
+> **NEVER write raw SQL strings inside model methods — use QueryBuilder exclusively.**  
+> **NEVER access `$table` property directly from outside the model. Always call `$model->getTable()`.**
+
 ```php
 class Product extends Model {
     protected string $table = 'products';
@@ -191,6 +194,30 @@ if ($v->fails()) {
 Rules: `required`, `string`, `integer`, `boolean`, `numeric`, `email`, `url`, `date`, `alpha`, `alpha_num`, `min:N`, `max:N`, `confirmed`, `in:a,b,c`, `nullable`, `regex:/pattern/`, `unique:table,column`
 
 Every form view MUST display validation errors when present.
+
+### FormRequests (encapsulate validation + authorization)
+
+When a controller action has complex validation, extract it into a `FormRequest` under `src/`:
+
+```php
+namespace App\Controllers\Requests;
+use App\Core\FormRequest;
+
+class StorePostRequest extends FormRequest {
+    public function authorize(): bool {
+        return $this->session->get('role') === 'admin';
+    }
+    public function rules(): array {
+        return ['title' => 'required|string|min:5|max:100'];
+    }
+}
+
+// Controller — router auto-instantiates, validates, and injects:
+public function store(StorePostRequest $request) {
+    $data = $request->getBody(); // only reaches here if valid
+}
+// If validation fails → auto-redirect with flashed errors (HTML) or 422 (AJAX)
+```
 
 ---
 
@@ -343,6 +370,26 @@ Application::$app->logger->error("Payment failed", ['order' => $orderId]);
 // Levels: debug, info, notice, warning, error, critical, alert, emergency
 // Output: storage/logs/app-YYYY-MM-DD.log (rotates at 10MB)
 ```
+
+---
+
+---
+
+## Feature Addition Workflow (mandatory order)
+
+When adding any feature, follow this layer order — **never skip or merge layers**:
+
+```
+1. routes/       → Register route + attach middlewares
+2. src/Models/   → Add/update model and DB queries (QueryBuilder only)
+3. src/Services/ → If business logic spans multiple models or has side effects
+4. src/Controllers/ → Orchestrate: receive input → call model/service → dispatch events → return view/json
+5. src/Views/    → Present data only — zero logic, zero DB access
+```
+
+> Business logic in Controllers = spaghetti.  
+> DB queries in Controllers or Views = hard veto.  
+> Side effects inline in Controllers (SMS, email, inventory) = must be a Listener instead.
 
 ---
 
