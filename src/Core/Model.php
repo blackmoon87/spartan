@@ -186,6 +186,15 @@ abstract class Model
     }
 
     /**
+     * Return all model attributes as a plain associative array.
+     * Useful for JSON serialization and passing data to views.
+     */
+    public function toArray(): array
+    {
+        return $this->attributes;
+    }
+
+    /**
      * Begin a database transaction.
      */
     public function beginTransaction(): bool

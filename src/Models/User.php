@@ -19,8 +19,15 @@ class User extends Model
     public function getCount(): int
     {
         try {
-            // Gracefully check if table exists first to avoid crashing clean installations
-            $stmt = $this->query("SHOW TABLES LIKE 'users'");
+            $driver = $this->db?->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+            // Check if the table exists — syntax differs per driver
+            if ($driver === 'sqlite') {
+                $stmt = $this->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+            } else {
+                $stmt = $this->query("SHOW TABLES LIKE 'users'");
+            }
+
             if ($stmt->rowCount() === 0) {
                 return 0;
             }

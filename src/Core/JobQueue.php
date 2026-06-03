@@ -116,8 +116,9 @@ class JobQueue
             $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (!empty($jobs)) {
-                $ids = implode(',', array_column($jobs, 'id'));
-                $this->db->exec("UPDATE jobs SET status = 'processing' WHERE id IN ({$ids})");
+                $ids          = array_column($jobs, 'id');
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                $this->db->prepare("UPDATE jobs SET status = 'processing' WHERE id IN ({$placeholders})")->execute($ids);
             }
 
             $this->db->commit();

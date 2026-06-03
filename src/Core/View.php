@@ -68,27 +68,7 @@ class View implements ViewInterface
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
         if (file_exists($bladeFile)) {
-            $compiledFile = $this->compile($view);
-            
-            // Backup the current rendering state (nested rendering protection)
-            $previousLayout = $this->extendedLayout;
-            $previousSections = $this->sections;
-            
-            $this->extendedLayout = null;
-            $this->sections = [];
-            
-            $viewContent = $this->renderCompiled($compiledFile, $params);
-            
-            if ($this->extendedLayout !== null) {
-                $layoutCompiled = $this->compile($this->extendedLayout);
-                $viewContent = $this->renderCompiled($layoutCompiled, $params);
-            }
-            
-            // Restore previous rendering state
-            $this->extendedLayout = $previousLayout;
-            $this->sections = $previousSections;
-            
-            return $viewContent;
+            return $this->compileAndRender($view, $params);
         }
 
         $viewContent = $this->renderOnlyView($view, $params);
@@ -114,30 +94,39 @@ class View implements ViewInterface
 
         $bladeFile = $this->viewsPath . "/{$view}.blade.php";
         if (file_exists($bladeFile)) {
-            $compiledFile = $this->compile($view);
-            
-            // Backup the current rendering state (nested rendering protection)
-            $previousLayout = $this->extendedLayout;
-            $previousSections = $this->sections;
-            
-            $this->extendedLayout = null;
-            $this->sections = [];
-            
-            $viewContent = $this->renderCompiled($compiledFile, $params);
-            
-            if ($this->extendedLayout !== null) {
-                $layoutCompiled = $this->compile($this->extendedLayout);
-                $viewContent = $this->renderCompiled($layoutCompiled, $params);
-            }
-            
-            // Restore previous rendering state
-            $this->extendedLayout = $previousLayout;
-            $this->sections = $previousSections;
-            
-            return $viewContent;
+            return $this->compileAndRender($view, $params);
         }
 
         return $this->renderOnlyView($view, $params);
+    }
+
+    /**
+     * Compile a Blade file and render it with nested layout support.
+     * Shared by render() and renderViewOnly() to eliminate duplication.
+     */
+    private function compileAndRender(string $view, array $params): string
+    {
+        $compiledFile = $this->compile($view);
+
+        // Backup state for nested rendering protection
+        $previousLayout   = $this->extendedLayout;
+        $previousSections = $this->sections;
+
+        $this->extendedLayout = null;
+        $this->sections       = [];
+
+        $viewContent = $this->renderCompiled($compiledFile, $params);
+
+        if ($this->extendedLayout !== null) {
+            $layoutCompiled = $this->compile($this->extendedLayout);
+            $viewContent    = $this->renderCompiled($layoutCompiled, $params);
+        }
+
+        // Restore previous state
+        $this->extendedLayout = $previousLayout;
+        $this->sections       = $previousSections;
+
+        return $viewContent;
     }
 
     /**

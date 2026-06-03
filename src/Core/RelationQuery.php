@@ -240,8 +240,21 @@ class RelationQuery
      */
     private function defaultKey(): string
     {
-        $parts   = explode('\\', $this->relatedClass);
-        $base    = strtolower(end($parts));
-        return $this->type === 'hasMany' ? $base . 's' : $base;
+        $parts = explode('\\', $this->relatedClass);
+        $base  = strtolower(end($parts));
+
+        if ($this->type !== 'hasMany') {
+            return $base;
+        }
+
+        // Basic English pluralization rules
+        if (str_ends_with($base, 'y') && !in_array(substr($base, -2, 1), ['a','e','i','o','u'], true)) {
+            return substr($base, 0, -1) . 'ies'; // category → categories
+        }
+        if (str_ends_with($base, 's') || str_ends_with($base, 'x') ||
+            str_ends_with($base, 'z') || str_ends_with($base, 'ch') || str_ends_with($base, 'sh')) {
+            return $base . 'es'; // box → boxes, match → matches
+        }
+        return $base . 's'; // order → orders
     }
 }

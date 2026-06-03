@@ -74,7 +74,21 @@ class QueryBuilder
      */
     public function select(string ...$columns): static
     {
-        $this->selects = $columns;
+        // Flatten comma-separated strings like select('id, name') into ['id', 'name']
+        $flat = [];
+        foreach ($columns as $col) {
+            if (str_contains($col, ',')) {
+                foreach (explode(',', $col) as $part) {
+                    $trimmed = trim($part);
+                    if ($trimmed !== '') {
+                        $flat[] = $trimmed;
+                    }
+                }
+            } else {
+                $flat[] = $col;
+            }
+        }
+        $this->selects = $flat;
         return $this;
     }
 
@@ -99,45 +113,44 @@ class QueryBuilder
      * Add an INNER JOIN clause.
      * Supports both join('table', 'col1', 'col2') and join('table', 'col1', '=', 'col2').
      */
-    public function join(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
+    public function join(string $table, string $first, string $operatorOrSecond = '', ?string $second = null): static
     {
-        if ($second === null) {
-            $second = $operatorOrSecond;
-            $operator = '=';
-        } else {
-            $operator = $operatorOrSecond;
-        }
-        $this->joins[] = ['type' => 'INNER', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
-        return $this;
+        return $this->addJoin('INNER', $table, $first, $operatorOrSecond, $second);
     }
 
     /**
      * Add a LEFT JOIN clause.
      */
-    public function leftJoin(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
+    public function leftJoin(string $table, string $first, string $operatorOrSecond = '', ?string $second = null): static
     {
-        if ($second === null) {
-            $second = $operatorOrSecond;
-            $operator = '=';
-        } else {
-            $operator = $operatorOrSecond;
-        }
-        $this->joins[] = ['type' => 'LEFT', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
-        return $this;
+        return $this->addJoin('LEFT', $table, $first, $operatorOrSecond, $second);
     }
 
     /**
      * Add a RIGHT JOIN clause.
      */
-    public function rightJoin(string $table, string $first, string $operatorOrSecond, ?string $second = null): static
+    public function rightJoin(string $table, string $first, string $operatorOrSecond = '', ?string $second = null): static
     {
-        if ($second === null) {
-            $second = $operatorOrSecond;
-            $operator = '=';
+        return $this->addJoin('RIGHT', $table, $first, $operatorOrSecond, $second);
+    }
+
+    /**
+     * Internal join builder.
+     * Supports two modes:
+     *   - Standard:  join('orders', 'orders.user_id', '=', 'users.id')
+     *   - Raw ON:    join('orders', 'orders.user_id = users.id AND orders.active = 1')
+     */
+    private function addJoin(string $type, string $table, string $first, string $operatorOrSecond, ?string $second): static
+    {
+        if ($second === null && $operatorOrSecond === '') {
+            // Raw ON condition passed as $first argument
+            $this->joins[] = ['type' => $type, 'table' => $table, 'raw' => $first];
+        } elseif ($second === null) {
+            // join('table', 'col1', 'col2') — operator defaults to '='
+            $this->joins[] = ['type' => $type, 'table' => $table, 'first' => $first, 'operator' => '=', 'second' => $operatorOrSecond, 'raw' => null];
         } else {
-            $operator = $operatorOrSecond;
+            $this->joins[] = ['type' => $type, 'table' => $table, 'first' => $first, 'operator' => $operatorOrSecond, 'second' => $second, 'raw' => null];
         }
-        $this->joins[] = ['type' => 'RIGHT', 'table' => $table, 'first' => $first, 'operator' => $operator, 'second' => $second];
         return $this;
     }
 
@@ -241,9 +254,12 @@ class QueryBuilder
 
         // COUNT query (respects wheres + joins + groupBy)
         [$whereSQL, $bindings] = $this->buildWhere();
-        $countSql = "SELECT COUNT(*) as cnt FROM `{$this->table}`";
+        $countSql = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table);
         foreach ($this->joins as $join) {
-            $countSql .= " {$join['type']} JOIN `{$join['table']}` ON {$join['first']} = {$join['second']}";
+            $onClause = isset($join['raw']) && $join['raw'] !== null
+                ? $join['raw']
+                : "{$join['first']} {$join['operator']} {$join['second']}";
+            $countSql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
         }
         $countSql .= $whereSQL;
         $total = (int) ($this->execute($countSql, $bindings)->fetch(\PDO::FETCH_ASSOC)['cnt'] ?? 0);
@@ -413,8 +429,10 @@ class QueryBuilder
 
         // Append JOIN clauses
         foreach ($this->joins as $join) {
-            $operator = $join['operator'] ?? '=';
-            $sql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$join['first']} {$operator} {$join['second']}";
+            $onClause = isset($join['raw']) && $join['raw'] !== null
+                ? $join['raw']
+                : "{$join['first']} {$join['operator']} {$join['second']}";
+            $sql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
         }
 
         $sql .= $whereSQL;

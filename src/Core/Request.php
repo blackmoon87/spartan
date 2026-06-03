@@ -37,12 +37,21 @@ class Request
         if (PHP_SAPI === 'cli') {
             return '';
         }
-        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-        $scriptDir = dirname($scriptName);
-        if ($scriptDir === '/' || $scriptDir === '\\') {
-            return '';
+
+        $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+        $requestUri = str_replace('\\', '/', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/');
+
+        // Walk up the script's directory tree to find the prefix that matches the request URI.
+        // Fixes subdirectory deployments (e.g. Laragon: /spartan/public/index.php → base = /spartan).
+        $dir = dirname($scriptName);
+        while ($dir !== '/' && $dir !== '.' && $dir !== '') {
+            if (str_starts_with($requestUri, rtrim($dir, '/') . '/') || $requestUri === rtrim($dir, '/')) {
+                return rtrim($dir, '/');
+            }
+            $dir = dirname($dir);
         }
-        return str_replace('\\', '/', $scriptDir);
+
+        return '';
     }
 
     /**
@@ -116,6 +125,15 @@ class Request
     public function input(string $key, mixed $default = null): mixed
     {
         return $_POST[$key] ?? $this->getJsonParams()[$key] ?? $_GET[$key] ?? $default;
+    }
+
+    /**
+     * Unified parameter retrieval from GET, POST, or JSON body.
+     * Alias for input() — added for compatibility with application-layer code.
+     */
+    public function getParam(string $key, mixed $default = null): mixed
+    {
+        return $this->input($key, $default);
     }
 
     /**

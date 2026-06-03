@@ -60,7 +60,13 @@ class Validator
                     'required'  => $this->checkRequired($field, $value),
                     'string'    => $this->checkString($field, $value),
                     'integer'   => $this->checkInteger($field, $value),
+                    'boolean'   => $this->checkBoolean($field, $value),
+                    'numeric'   => $this->checkNumeric($field, $value),
                     'email'     => $this->checkEmail($field, $value),
+                    'url'       => $this->checkUrl($field, $value),
+                    'date'      => $this->checkDate($field, $value),
+                    'alpha'     => $this->checkAlpha($field, $value),
+                    'alpha_num' => $this->checkAlphaNum($field, $value),
                     'confirmed' => $this->checkConfirmed($field, $value, $data),
                     'min'       => $this->checkMin($field, $value, (int) $param),
                     'max'       => $this->checkMax($field, $value, (int) $param),
@@ -160,6 +166,51 @@ class Validator
     {
         if ($value !== null && !in_array((string) $value, $allowed, true)) {
             $this->addError($field, "The {$field} must be one of: " . implode(', ', $allowed) . ".");
+        }
+    }
+
+    private function checkBoolean(string $field, mixed $value): void
+    {
+        $valid = [true, false, 1, 0, '1', '0', 'true', 'false'];
+        if ($value !== null && !in_array($value, $valid, true)) {
+            $this->addError($field, "The {$field} field must be a boolean.");
+        }
+    }
+
+    private function checkNumeric(string $field, mixed $value): void
+    {
+        if ($value !== null && !is_numeric($value)) {
+            $this->addError($field, "The {$field} field must be numeric.");
+        }
+    }
+
+    private function checkUrl(string $field, mixed $value): void
+    {
+        if ($value !== null && !filter_var($value, FILTER_VALIDATE_URL)) {
+            $this->addError($field, "The {$field} field must be a valid URL.");
+        }
+    }
+
+    private function checkDate(string $field, mixed $value): void
+    {
+        if ($value === null) return;
+        $d = \DateTime::createFromFormat('Y-m-d', (string) $value);
+        if (!$d || $d->format('Y-m-d') !== (string) $value) {
+            $this->addError($field, "The {$field} field must be a valid date (YYYY-MM-DD).");
+        }
+    }
+
+    private function checkAlpha(string $field, mixed $value): void
+    {
+        if ($value !== null && !ctype_alpha((string) $value)) {
+            $this->addError($field, "The {$field} field may only contain letters.");
+        }
+    }
+
+    private function checkAlphaNum(string $field, mixed $value): void
+    {
+        if ($value !== null && !ctype_alnum((string) $value)) {
+            $this->addError($field, "The {$field} field may only contain letters and numbers.");
         }
     }
 

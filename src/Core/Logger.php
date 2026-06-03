@@ -68,6 +68,13 @@ class Logger
         $logLine = "[{$timestamp}] [{$level}] {$message}{$contextString}" . PHP_EOL;
         
         $filePath = $this->logPath . '/app-' . date('Y-m-d') . '.log';
+
+        // Rotate if file exceeds 10 MB
+        if (file_exists($filePath) && filesize($filePath) >= 10 * 1024 * 1024) {
+            $rotated = $this->logPath . '/app-' . date('Y-m-d') . '-' . date('His') . '.log';
+            rename($filePath, $rotated);
+        }
+
         file_put_contents($filePath, $logLine, FILE_APPEND);
     }
 
