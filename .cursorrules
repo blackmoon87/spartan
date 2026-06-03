@@ -1,663 +1,359 @@
-# Custom PHP MVC Rules & Coding Standards
+# Spartan — Rules & Standards
 
-You are assisting a developer in a custom, lightweight, modern PHP MVC boilerplate called **Spartan**. 
+## Identity
+Custom lightweight PHP 8.1+ MVC framework. Zero external dependencies in core. Composer packages are allowed when needed.
+**Never assume Laravel/Symfony/Yii conventions. Everything below is the law.**
 
-> [!IMPORTANT]
-> **CRITICAL RULE FOR AI CODE GENERATION:**
-> Never code based on generic framework assumptions (such as Laravel, Symfony, or Yii defaults). You MUST strictly adhere to the custom Spartan API.
-> - **Zero-Dependency Core (Optional vendor/)**: The core framework is designed to run 100% on native PHP with a custom built-in autoloader. However, external composer packages are fully supported and can be utilized or recommended if a feature or test specifically requires specialized external libraries.
-> - **Code to Interfaces**: Always use `SessionInterface`, `ViewInterface`, and `AuthInterface` contracts instead of concrete classes when referring to session, view, and authentication layers to keep them decoupled.
-> - **No Generic Helpers**: Do NOT use helper functions like `view()`, `request()`, `response()`, `redirect()`, `session()`, `env()`, or `config()` unless they are explicitly defined in Spartan's core.
-> - **No Direct Globals**: Never use `$_GET`, `$_POST`, `$_FILES`, `$_SESSION`, `$_REQUEST`, or `$_SERVER` directly inside controllers, models, or services. Use the injected `Request` and `Session` abstractions (e.g. `$request->file('avatar')` to retrieve uploaded files).
-> - **No Native Redirects/Headers**: Never call `header("Location: ...")` or `http_response_code()`. Always route redirects and status codes through the `Response` object.
-> - **No Implicit ORM Magic**: Never assume implicit relationship mappings or auto-resolved table names. Always explicitly define table names, foreign keys, and relationship aliases.
-> - **No Auto-installed Packages**: Do not import or assume third-party library namespaces (e.g. Carbon for dates, Illuminate components) unless explicitly instructed. Use native PHP objects.
+---
 
-Follow these specifications and structural rules when writing, refactoring, or generating code.
+## Absolute Prohibitions
 
-## 1. Project Directory Structure
+| Forbidden | Use Instead |
+|---|---|
+| `$_GET`, `$_POST`, `$_FILES`, `$_SESSION`, `$_SERVER` in Controllers/Models | `$this->request->*`, `$this->session->*` |
+| `header("Location: ...")`, `http_response_code()` | `$this->redirect()`, `$this->response->setStatusCode()` |
+| Raw `echo $var`, `<?= $var ?>` without escaping | `{{ $var }}` / `@escape($var)` / `$this->escape($var)` |
+| SQL strings inside Controllers or Views | All SQL stays in Models via `$this->table()->...` |
+| Hardcoded paths, credentials, or env-specific values | `.env` → `config/config.php` → `Application::$app->config` |
+| `session_start()` manually | Session auto-starts in `Session::__construct()` |
+| `isset()`/`empty()`/`filter_var()` validation chains in Controllers | `$this->validate($data, $rules)` |
+| `view()`, `request()`, `redirect()`, `env()`, `config()` helpers | Not defined — do not use |
+| Implicit table names or auto-resolved foreign keys | Always declare `$table`, `foreignKey`, and relation `as:` explicitly |
+| Third-party namespaces (Carbon, Illuminate, etc.) | Native PHP unless explicitly instructed |
+
+---
+
+## Structure
 
 ```
-├── config/
-│   └── config.php          # Main config loader (loads .env parameters)
-├── database/               # Database migrations and seed files
-│   ├── migrations/        # SQL migration files executed in sequence
-│   └── seed.sql           # Database seeding queries
-├── public/
-│   ├── .htaccess           # URL rewrites to index.php
-│   └── index.php           # Front Controller — loads route files only
-├── routes/                 # Route definitions split by domain
-│   ├── web.php             # Public-facing pages
-│   ├── admin.php           # Protected dashboard routes
-│   └── api.php             # JSON API endpoints
-├── src/
-│   ├── Core/               # Core framework layers (Do not modify unless requested)
-│   │   ├── Application.php      # App Orchestrator
-│   │   ├── Cache.php            # Cache facade (file/redis driver)
-│   │   ├── CacheDriverInterface.php
-│   │   ├── CacheDrivers/
-│   │   │   ├── FileCacheDriver.php   # Default — zero dependencies
-│   │   │   └── RedisCacheDriver.php  # Optional — requires phpredis
-│   │   ├── Container.php        # Service Container (DI)
-│   │   ├── Controller.php       # Base Controller
-│   │   ├── Database.php         # PDO connection singleton
-│   │   ├── Database/
-│   │   │   └── Migrator.php     # DDL/DML Migration Engine
-│   │   ├── EventDispatcher.php  # Synchronous event system
-│   │   ├── Middleware.php       # Route middleware abstraction
-│   │   ├── Model.php            # Base Model
-│   │   ├── QueryBuilder.php     # Fluent SQL query builder
-│   │   ├── Request.php          # HTTP Request handler
-│   │   ├── Response.php         # HTTP Response handler
-│   │   ├── Router.php           # Router (regex matcher)
-│   │   ├── Session.php          # Session implementation
-│   │   ├── SessionInterface.php # Session contract interface
-│   │   ├── Validator.php        # Input validation rules engine
-│   │   ├── View.php             # View compiler implementation
-│   │   └── ViewInterface.php    # View contract interface
-│   ├── Controllers/        # App Controllers (Extend App\Core\Controller)
-│   ├── Events/             # Event name constants
-│   ├── Listeners/          # Event listener classes (must implement handle())
-│   ├── Middlewares/        # Route Middlewares (Extend App\Core\Middleware)
-│   │   └── CsrfMiddleware.php # Global CSRF verification middleware
-│   ├── Models/             # App Models (Extend App\Core\Model)
-│   ├── Services/           # Business logic services (no extends required)
-│   └── Views/              # View templates
-│       ├── layouts/        # Layout wrappers (main_blade.blade.php, main.php)
-│       ├── [view].blade.php # Blade template (Preferred)
-│       └── [view].php      # Native PHP template (Fallback)
-├── storage/
-│   └── cache/              # File cache storage (auto-created)
-├── .env                    # Environment variables
-├── composer.json           # Composer PSR-4 namespaces
-├── spartan                 # Command line runner for database & worker operations
-└── README.md               # Setup and development guide
+config/config.php          ← env loader, returns config array
+public/index.php           ← front controller only (loads routes, runs app)
+routes/web.php             ← public pages
+routes/admin.php           ← protected pages
+routes/api.php             ← JSON endpoints
+src/Controllers/           ← extend App\Core\Controller
+src/Models/                ← extend App\Core\Model
+src/Views/                 ← .blade.php (preferred) or .php (fallback)
+src/Views/layouts/         ← layout wrappers
+src/Middlewares/           ← extend App\Core\Middleware
+src/Services/              ← business logic, no extends required
+src/Listeners/             ← must implement handle(mixed $payload): void
+src/Events/                ← event name constants
+src/Core/                  ← framework internals (do not modify unless requested)
+database/migrations/       ← sequenced .sql files
+storage/logs/              ← daily log files (auto-created)
+storage/cache/             ← file cache (auto-created)
 ```
 
 ---
 
-## 2. Coding Conventions & Clean Architecture
+## Coding Rules
 
-- **Strict Types**: Always write `declare(strict_types=1);` at the top of every PHP file.
-- **Namespacing**: App namespace is `App\`. Files under `src/` must match their folders:
-  - `src/Controllers/` -> `namespace App\Controllers;`
-  - `src/Models/`      -> `namespace App\Models;`
-  - `src/Core/`        -> `namespace App\Core;`
-  - `src/Middlewares/` -> `namespace App\Middlewares;`
-  - `src/Services/`    -> `namespace App\Services;`
-  - `src/Listeners/`   -> `namespace App\Listeners;`
-  - `src/Events/`      -> `namespace App\Events;`
-- **Strict Separation of Concerns**:
-  - **No SQL outside Models**: Absolutely NO database queries, direct PDO calls, or SQL strings are allowed in Controller or View files. All data access must be encapsulated inside Model files extending `App\Core\Model`.
-  - **No Output escaping inside Core/Request**: Inputs are read raw to prevent encoding corruption. Output escaping is done exclusively in Views.
-- **Strict Configuration Management (No Hardcoding)**: Never hardcode API keys, database credentials, server paths, ports, email settings, or environment-specific business constants inside any project file. All configurations must be declared in `.env`, mapped via `config/config.php`, and accessed dynamically using `Application::$app->config`.
-- **Validation Feedback Guarantee**: Every View page containing an HTML form must include a dedicated block to render flashed validation errors (`validation_errors`). Validation failures must never result in a silent page reload; they must display clear, user-friendly feedback at the top of the form or near the affected inputs.
-- **Decoupled Upload Pathing**: Upload directories must be resolved dynamically relative to the project's public uploads directory (e.g. `public/uploads`) using framework config keys. Never hardcode absolute file paths or resolve them relative to the core library root folder.
-- **Security Rules (all mandatory)**:
-  - **XSS**: Every variable echoed inside a View or Layout MUST be escaped. Use `{{ $var }}` or `@escape($var)` in Blade templates, and `$this->escape($var)` in native PHP templates. Raw `echo $var` or `<?= $var ?>` without escaping is forbidden.
-  - **CSRF**: Every HTML `<form method="POST">` MUST contain CSRF protection. Use `@csrf` in Blade templates, or `<?= $this->csrfToken() ?>` in native PHP templates. The global `CsrfMiddleware` validates all state-changing POST requests automatically (across form, AJAX, and JSON bodies) unless explicitly excluded.
-  - **Session Fixation**: `$this->session->regenerate()` MUST be called immediately after every successful login or role/privilege change. Never skip this.
-  - **Session Cookie**: Session is automatically started with `HttpOnly=true`, `SameSite=Lax`, and `Secure` (auto-detected). Never call `session_start()` manually outside of `Session::__construct()`.
-  - **View Path Safety**: Never pass user-controlled input directly to `$this->render()`. View names are whitelisted to `[a-zA-Z0-9_/]` only. Path traversal attempts (`../../`) throw an `InvalidArgumentException`.
-  - **Application Singleton**: `Application::$app` is `readonly` (PHP 8.1+). Never attempt to reassign it. The constructor enforces single instantiation with a `LogicException`.
-  - **Open Redirect**: Never pass user-supplied input directly to `$this->redirect()`. Always validate or whitelist the target URL first.
-  - **Debug Mode**: Never hardcode `display_errors = 1`. Error visibility is controlled exclusively by the `APP_DEBUG` key in `.env`.
-  - **DB Testing**: Use `Database::swapInstance($mockPdo)` to inject a test double in test suites. Use `Database::reset()` between tests.
-  - **Lazy DB Connections**: `Application::$app->db` is lazy-loaded and boots on the first access. Do not assume an active database connection exists at bootstrap phase.
-  - **Validation**: Never write raw `isset()` / `empty()` / `filter_var()` validation chains inside Controllers. Always use `$this->validate($data, $rules)`.
+- `declare(strict_types=1);` at the top of every PHP file — no exceptions.
+- Namespace matches folder: `src/Controllers/` → `namespace App\Controllers;`
+- One class per file. PSR-4 autoloading via Composer or built-in fallback.
+- Code to interfaces: use `SessionInterface`, `ViewInterface`, `AuthInterface` — not concrete classes.
+- Action methods return `string` (rendered HTML) or `void` (redirect/JSON).
 
 ---
 
-## 3. Core Class Usage Guidelines
+## Controllers
 
-### Controllers
-- Create controllers under `src/Controllers/` and extend `App\Core\Controller`.
-- The base constructor automatically injects `$this->request`, `$this->response`, and `$this->session` — use these properties directly instead of accessing the global `Application::$app` singleton.
-- Action methods should return `string` (rendered view content) or void (when redirecting/returning JSON).
-- Use `$this->redirect('/path')` and `$this->json($data)` shortcuts instead of calling Response directly.
-- Render views using `$this->render('view_name', ['param' => $value])`.
-- For HTMX / AJAX updates, use the shortcut `$this->renderViewOnly('view_name', ['param' => $value])` to compile and return the partial template content without layout wrapping.
-- Share variables globally across all views using `$this->share('key', $value)` within any Controller action, or using `Application::$app->view->share('key', $value)` during application bootstrapping.
-
-### Request & File Uploads
-- Access all inputs and files through the injected `$this->request` instance.
-- **Input parameters:** Use `$this->request->get($key)`, `$this->request->post($key)`, `$this->request->input($key)`, or `$this->request->getBody()`. These methods automatically parse and merge JSON request payloads (when Content-Type is `application/json`).
-- **HTTP Headers:** Never use `$_SERVER` directly to fetch request headers. Use `$this->request->header('Header-Name')` (e.g. `$this->request->header('Authorization')`).
-- **File Uploads:** Never access `$_FILES` directly. Use:
-  - `$this->request->file('field_name')` to retrieve a specific file metadata array.
-  - `$this->request->getFiles()` to get all uploaded files.
-- **Upload Path:** Do not hardcode paths. Retrieve the target directory from application configuration: `Application::$app->config['storage']['uploads']`.
-
-### Models
-- Create models under `src/Models/` and extend `App\Core\Model`.
-- Always declare the table property: `protected string $table = 'my_table';`.
-- **Retrieving Table Names**: Avoid using Reflection or accessing the protected property directly. Always use `$model->getTable()` to retrieve a model's table name, keeping relationships and queries highly optimized.
-- **NEVER write raw SQL strings inside model methods.** Use the QueryBuilder instead.
-- Access the QueryBuilder via `$this->table()` (uses model's own table) or `$this->table('other_table')`.
-
-#### QueryBuilder API Reference
 ```php
-// SELECT
-$this->table()->get();                                      // all rows
-$this->table()->where('active', 1)->get();                  // filtered
-$this->table()->where('role', 'admin')->first();            // first match or null
-$this->table()->find($id);                                  // by primary key (returns raw database ?array)
-(new User())->findInstance($id);                            // by primary key (returns hydrated ?Model object instance)
-(new User())->findInstanceBy('slug', $slug);               // by custom column (returns hydrated ?Model object instance)
-$this->table()->where('status', 'paid')->count();           // count
-$this->table()->where('active', 1)->exists();              // boolean
+// Inject via constructor (container auto-resolves)
+class OrderController extends Controller {
+    public function __construct(private PaymentService $payment) {
+        parent::__construct();
+    }
+}
 
-// Chaining
-$this->table()
-     ->select('id', 'name', 'email')                       // specific columns
-     ->where('active', 1)
-     ->where('role', ['admin', 'manager'], 'IN')           // IN clause
-     ->orderBy('name', 'DESC')
-     ->limit(10)
-     ->offset(20)
-     ->get();
+// Available in every controller action:
+$this->request       // Request object
+$this->response      // Response object
+$this->session       // SessionInterface
+$this->auth          // AuthInterface
 
-// GROUP BY + HAVING
+// Shortcuts:
+$this->render('view_name', $data);          // full page
+$this->renderViewOnly('partial', $data);    // HTMX partial — no layout
+$this->redirect('/path');
+$this->json(['key' => 'value']);
+$this->make(SomeService::class);
+$this->event('order.placed', $payload);
+$this->share('key', $value);               // share to all views
+```
+
+---
+
+## Request
+
+```php
+$this->request->get('key')       // $_GET
+$this->request->post('key')      // $_POST or JSON body
+$this->request->input('key')     // POST → GET fallback
+$this->request->getParam('key')  // unified alias for input()
+$this->request->getBody()        // all inputs as array
+$this->request->file('avatar')   // uploaded file metadata
+$this->request->header('Authorization')
+$this->request->isAjax()
+$this->request->isPost()
+```
+
+Upload path: `Application::$app->config['storage']['uploads']` — never hardcode.
+
+---
+
+## Models & QueryBuilder
+
+```php
+class Product extends Model {
+    protected string $table = 'products';
+    protected bool $timestamps = true;  // auto created_at / updated_at
+}
+
+// QueryBuilder — always via $this->table()
+$this->table()->get();
+$this->table()->where('active', 1)->first();
+$this->table()->find($id);                        // raw array
+(new Product)->findInstance($id);                 // hydrated Model
+(new Product)->findInstanceBy('slug', $slug);
+$this->table()->where('status', 'paid')->count();
+$this->table()->where('active', 1)->exists();
+$this->table()->where('role', ['a','b'], 'IN')->get();
+$this->table()->select('id', 'name')->orderBy('name', 'DESC')->limit(10)->offset(0)->get();
+$this->table()->groupBy('status')->having('cnt', 5, '>=')->get();
+$this->table()->paginate(15, $page);   // returns ['data','total','per_page','current_page','last_page']
+
+// Write (require at least one where() — throws LogicException otherwise)
+$this->table()->insert(['col' => 'val']);         // returns last insert ID
+$this->table()->where('id', $id)->update($data);  // returns affected rows
+$this->table()->where('id', $id)->delete();       // returns deleted rows
+$this->table()->truncate();                       // intentional full clear
+
+// Timestamps shortcuts (auto-injects created_at / updated_at when $timestamps = true)
+$this->create($data);
+$this->save($id, $data);
+
+// Joins
 $this->table('orders')
-     ->select('status')
-     ->groupBy('status')
-     ->having('cnt', 5, '>=')
+     ->join('users', 'orders.user_id', 'users.id')               // standard
+     ->leftJoin('coupons', 'orders.coupon_id', '=', 'coupons.id') // with operator
+     ->join('logs', 'logs.order_id = orders.id AND logs.active = 1') // raw ON
+     ->select('orders.id', 'users.name')
      ->get();
-// Note: use a raw alias in select for aggregate — HAVING column must match
 
-// Pagination — returns ['data'=>[], 'total'=>int, 'per_page'=>int, 'current_page'=>int, 'last_page'=>int]
-$page   = (int) $this->request->get('page', 1);
-$result = $this->table()->where('active', 1)->paginate(15, $page);
-// $result['data']         => rows for this page
-// $result['last_page']    => total pages
+// Transactions
+$this->transaction(function ($model) {
+    $model->table('orders')->insert([...]);
+    $model->table('invoices')->insert([...]);
+});
 
-// INSERT — returns last inserted ID
-$id = $this->table()->insert(['name' => 'Ali', 'email' => 'ali@x.com']);
-
-// UPDATE — returns affected row count
-$count = $this->table()->where('id', $id)->update(['status' => 'active']);
-
-// DELETE — returns deleted row count
-$count = $this->table()->where('id', $id)->delete();
-
-// Cross-table (advanced)
-$orders = $this->table('orders')->where('user_id', $userId)->get();
-
-// JOIN — for multi-table queries (supports both 3-arg legacy and 4-arg with operator)
-$this->table('orders')
-     ->join('users',    'orders.user_id',   'users.id')         // 3-argument (operator defaults to '=')
-     ->leftJoin('coupons', 'orders.coupon_id', '=', 'coupons.id') // 4-argument (with custom operator)
-     ->select('orders.id', 'users.name', 'coupons.code')
-     ->where('orders.status', 'paid')
-     ->get();
+// toArray
+$model->toArray();  // returns $attributes as plain array
 ```
-- Database transactions: `$this->beginTransaction()`, `$this->commit()`, `$this->rollBack()`.
-- Or use the transactional wrapper which auto-commits/rolls back on failure:
-  ```php
-  $this->transaction(function ($model) {
-      $model->table('orders')->insert([...]);
-      $model->table('invoices')->insert([...]);
-  });
-  ```
-
-> **Safety rules for write operations:**
-> - `delete()` — **requires** at least one `where()` condition. Throws `LogicException` if called without one.
-> - `update()` — **requires** at least one `where()` condition. Throws `LogicException` if called without one.
-> - `truncate()` — use explicitly when you intentionally want to delete ALL rows from a table.
->
-> ```php
-> // ✅ correct — conditional delete
-> $this->table()->where('id', $id)->delete();
->
-> // ✅ correct — intentional full-table clear
-> $this->table('temp_jobs')->truncate();
->
-> // ❌ throws LogicException
-> $this->table()->delete();
-> ```
-
-### Routes
-- **Never define routes directly in `public/index.php`.** Use the route files in `routes/`.
-- `routes/web.php`   — public pages (no auth required)
-- `routes/admin.php` — protected pages (attach AuthMiddleware)
-- `routes/api.php`   — JSON endpoints (attach TokenMiddleware if stateless)
-- Register new route files in `public/index.php` with `require_once $routesPath . '/new_domain.php';`
-- **Supported HTTP methods**: `get`, `post`, `put`, `patch`, `delete`.
-- **Form method spoofing**: HTML forms can only send GET/POST. To use PUT/PATCH/DELETE from a form, add a hidden field:
-  ```html
-  <form method="POST" action="/items/5">
-      <?= $this->csrfToken() ?>
-      <input type="hidden" name="_method" value="DELETE">
-      ...
-  </form>
-  ```
-  The Router detects `_method` on POST requests and routes to the correct handler. CSRF is still enforced (real transport is POST).
-- **CSRF Exclusions**: To exclude specific stateless routes (like payment webhooks or API endpoints) from `CsrfMiddleware` checks, register them in route files using `$app->router->excludeCsrf()`:
-  ```php
-  $app->router->excludeCsrf(
-      '/api/stripe/webhook',
-      '/api/v1/*'
-  );
-  ```
-
-### Middlewares
-- Create middlewares under `src/Middlewares/` extending `App\Core\Middleware`.
-- Register in the route file:
-  ```php
-  use App\Middlewares\AuthMiddleware;
-  use App\Middlewares\SecurityHeadersMiddleware;
-  $app->router->get('/admin', [AdminController::class, 'dashboard'], [
-      SecurityHeadersMiddleware::class,
-      AuthMiddleware::class,
-  ]);
-  ```
-- **`SecurityHeadersMiddleware`** — sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `X-XSS-Protection`, and `Content-Security-Policy: default-src 'self'`. Attach to any route that serves HTML pages.
-  - To allow external assets (CDN fonts, scripts), extend the CSP by constructing the middleware manually:
-    ```php
-    // In a route file, not via class-name string — pass the instance directly
-    // Note: middleware array accepts class names (zero-arg) or pre-built instances.
-    new SecurityHeadersMiddleware("default-src 'self'; font-src https://fonts.gstatic.com")
-    ```
-- See `src/Middlewares/AuthMiddleware.php` as a working example.
-- **Middleware Groups**: Register custom middleware groups globally to avoid repetitive declarations on individual routes:
-  ```php
-  $app->router->middlewareGroup('web', [
-      SecurityHeadersMiddleware::class,
-  ]);
-  
-  $app->router->middlewareGroup('admin_auth', [
-      SecurityHeadersMiddleware::class,
-      AuthMiddleware::class,
-  ]);
-
-  // Use the group name in route declarations:
-  $app->router->get('/dashboard', [DashboardController::class, 'index'], ['admin_auth']);
-  ```
-
-### Request & Response
-- Retrieve request parameters using the typed properties injected in the base Controller:
-  - `$this->request->get('key')` — query string ($_GET)
-  - `$this->request->post('key')` — request body ($_POST)
-  - `$this->request->input('key')` — POST then GET fallback
-  - `$this->request->getBody()` — all inputs as array (POST wins over GET for duplicate keys)
-- To redirect: `$this->redirect('/path')` (Controller shortcut).
-- To return JSON: `$this->json(['status' => 'ok'])` (Controller shortcut).
-- Direct `Application::$app->request` access is reserved for use OUTSIDE Controllers (e.g. Middlewares, CLI scripts).
-
-### Validation
-- Use `$this->validate($data, $rules)` inside any Controller action that receives user input.
-- Supported rules (pipe-separated): `required`, `string`, `integer`, `email`, `min:N`, `max:N`, `confirmed`, `in:a,b,c`, `nullable`, `regex:/pattern/`, `unique:table,column`.
-- Check result with `$v->fails()` and retrieve errors with `$v->errors()` (all fields) or `$v->error('field')` (single field).
-- **`nullable`** — if the field is absent or empty, all subsequent rules for that field are skipped. Place it first in the rule string:
-  ```php
-  'phone' => 'nullable|string|min:7'
-  ```
-- **`regex:/pattern/`** — value must match the PCRE pattern (include delimiters):
-  ```php
-  'slug' => 'required|regex:/^[a-z0-9-]+$/'
-  ```
-- **`unique:table,column`** — verifies no existing row has this value. Column defaults to the field name if omitted:
-  ```php
-  'email' => 'required|email|unique:users,email'
-  'username' => 'required|string|unique:users'   // column = username
-  ```
-- Example:
-  ```php
-  $v = $this->validate($this->request->getBody(), [
-      'email'    => 'required|email|unique:users,email',
-      'password' => 'required|min:8|max:64',
-      'phone'    => 'nullable|string|min:7',
-  ]);
-  if ($v->fails()) {
-      return $this->render('register', ['errors' => $v->errors()]);
-  }
-  ```
-
-### Session & Flash Messages
-- Set secure session values: `$this->session->set('key', $value)`.
-- Retrieve session values: `$this->session->get('key')`.
-- **After login or any privilege change**: ALWAYS call `$this->session->regenerate()` to prevent session fixation.
-- Create a flash message for the next request cycle: `$this->session->setFlash('status', 'Saved successfully!')`.
-- Display flash messages in Views using `$this->flash('status')`.
-
-### Authentication (`Auth`)
-- **Accessing Auth**: Use the global `auth()` helper function or the `$this->auth` property in Controllers (type-hinted to `AuthInterface`).
-- **Check Auth Status**: Use `auth()->check()` to see if a user is currently logged in.
-- **Get Authenticated User ID**: Use `auth()->id()` to retrieve the logged-in user's primary key.
-- **Get User Model Instance**: Use `auth()->user()` to get the fully-hydrated user model instance (cached in-memory, automatically re-fetched if the session `user_id` changes).
-- **User Model Configuration**: The resolved class is loaded dynamically from `$app->config['auth']['model']` (e.g. `App\Models\User`).
-
-### Service Container
-- Register services in `routes/web.php` or `public/index.php` after `$app` is instantiated:
-  ```php
-  Application::$app->container->singleton(MailService::class, fn() => new SmtpMailer(config('mail')));
-  Application::$app->container->bind(PdfExporter::class, fn() => new PdfExporter());
-  ```
-- Resolve inside a Controller using the shortcut: `$mailer = $this->make(MailService::class);`
-- Services live in `src/Services/` and must NOT extend Model or Controller.
-- Use Container for any class that has external dependencies or must be swappable in tests.
-- **Controller Dependency Injection (DI)**: Controllers resolved by the router automatically resolve constructor parameters using reflection and container bindings. If a controller constructor has dependencies, type-hint them and the container will automatically instantiate/resolve them:
-  ```php
-  namespace App\Controllers;
-
-  use App\Services\PaymentService;
-
-  class OrderController extends Controller {
-      public function __construct(private PaymentService $payment) {
-          parent::__construct();
-      }
-  }
-  ```
-  If a controller has no constructor, it instantiates instantly (`new $controller()`) with zero reflection overhead, ensuring peak execution speed.
-
-### Cache
-- **Rule**: Never query the database for data that rarely changes. Use `Cache::remember()` instead.
-- Default driver is `file` (zero dependencies). Switch to `redis` via `CACHE_DRIVER=redis` in `.env`.
-  ```php
-  use App\Core\Cache;
-
-  // Fetch or store (recommended pattern)
-  $products = Cache::remember('active_products', 3600, fn() => $this->table()->where('active', 1)->get());
-
-  // Manual control
-  Cache::put('key', $value, 600);
-  $val = Cache::get('key', 'default');
-  Cache::forget('key');
-  Cache::flush(); // clear all
-  ```
-
-### Models — Timestamps
-- Set `protected bool $timestamps = true;` on any model that has `created_at` / `updated_at` columns.
-- Use `$this->create($data)` instead of `$this->table()->insert($data)` — timestamps are auto-injected.
-- Use `$this->save($id, $data)` instead of `$this->table()->where('id', $id)->update($data)` — `updated_at` is auto-injected.
-- You may still override timestamps manually by passing them explicitly in `$data`.
-  ```php
-  class Post extends Model
-  {
-      protected string $table     = 'posts';
-      protected bool   $timestamps = true;
-
-      public function publish(int $id): int
-      {
-          return $this->save($id, ['status' => 'published']); // updated_at auto-set
-      }
-
-      public function createDraft(array $data): string|false
-      {
-          return $this->create($data); // created_at + updated_at auto-set
-      }
-  }
-  ```
-
-### Model Relationships
-
-Lightweight relationship system — explicit, no magic, no lazy loading.
-
-**Define relationships in the Model:**
-```php
-use App\Core\RelationQuery;
-use App\Models\Order;
-use App\Models\Profile;
-use App\Models\User;
-
-class User extends Model
-{
-    protected string $table = 'users';
-
-    // One user has many orders (foreign key on orders table)
-    public function orders(): RelationQuery
-    {
-        return $this->hasMany(Order::class, foreignKey: 'user_id');
-    }
-
-    // One user has one profile (foreign key on profiles table)
-    public function profile(): RelationQuery
-    {
-        return $this->hasOne(Profile::class, foreignKey: 'user_id');
-    }
-}
-
-class Order extends Model
-{
-    protected string $table = 'orders';
-
-    // Each order belongs to one user (foreign key on THIS table)
-    public function user(): RelationQuery
-    {
-        return $this->belongsTo(User::class, foreignKey: 'user_id');
-    }
-}
-```
-
-**Single record:**
-```php
-$user    = (new User)->find(1);
-$orders  = (new User)->orders()->for($user);    // array of order rows
-$profile = (new User)->profile()->for($user);   // single row or null
-
-$order = (new Order)->find(5);
-$user  = (new Order)->user()->for($order);      // single user row or null
-```
-
-**Collection — eager loading (NEVER use for() inside a loop):**
-```php
-// ❌ N+1 — 1 query per user:
-foreach ($users as $user) {
-    $user['orders'] = (new User)->orders()->for($user); // new query each iteration
-}
-
-// ✅ Eager load — 2 queries total regardless of collection size:
-$users = (new User)->all();                                       // query 1
-$users = (new User)->orders()->loadFor($users, as: 'orders');    // query 2
-// $users[0]['orders'] → [order, order, ...]
-// $users[1]['orders'] → [order, ...]
-
-// belongsTo eager load:
-$orders = (new Order)->all();                                     // query 1
-$orders = (new Order)->user()->loadFor($orders, as: 'user');     // query 2
-// $orders[0]['user'] → user row or null
-```
-
-- **`foreignKey` is always required** — never derived automatically. Be explicit.
-- **`loadFor()` as key defaults**: `hasMany` → class name + 's' (e.g. `'orders'`), `hasOne`/`belongsTo` → class name (e.g. `'user'`). Always pass `as:` explicitly for clarity.
-- Relationships return plain arrays — consistent with the rest of the framework.
-
-### Events & Listeners
-- **Rule**: Any side effect after a primary action (SMS, email, inventory, log) must be a Listener — never inline code inside a Controller.
-
-- Dispatch from a Controller shortcut: `$this->event('order.placed', $orderArray);`
-- Register listeners in `routes/web.php` or a dedicated boot file:
-  ```php
-  use App\Listeners\SendOrderSms;
-  use App\Listeners\UpdateInventory;
-
-  // Sync — executes immediately (fast DB updates, logging)
-  Application::$app->events->listen('order.placed', UpdateInventory::class);
-
-  // Async — pushed to jobs table, worker executes later (SMS, email, HTTP calls)
-  Application::$app->events->listen('order.placed', SendOrderSms::class,
-      async: true, maxAttempts: 3, onFailure: 'retry'
-  );
-  Application::$app->events->listen('order.placed', SendEmail::class,
-      async: true, maxAttempts: 1, onFailure: 'stop'
-  );
-  ```
-- Listener classes must implement `public function handle(mixed $payload): void`.
-- See `src/Listeners/OrderPlacedListener.php` as a working example.
-
-### Async Jobs & Queue
-- **Rule**: Any listener that calls an external API, sends SMS/Email, or generates a file MUST be registered with `async: true`.
-- **Worker**: Process pending jobs via the `spartan` console CLI tool:
-  ```bash
-  # Single pass — run once and exit (for Cron, every minute)
-  php spartan worker
-
-  # Loop mode — poll every 5 seconds (for development / daemon)
-  php spartan worker --loop
-
-  # Cron example:
-  # * * * * * php /var/www/project/spartan worker >> /var/log/worker.log 2>&1
-  ```
-- **Failure behaviour**:
-  - `onFailure: 'retry'` — retries with exponential backoff: attempt 2 → +1 min, attempt 3+ → +5 min.
-  - `onFailure: 'stop'`  — marks failed immediately on first error. Use for non-idempotent operations.
-- **Fallback guarantee**: If the DB is unavailable when dispatching, async listeners fall back to sync execution automatically (logged to error_log). The request never silently drops events.
-- **`maxAttempts`** minimum is 1. Setting it to 1 with `onFailure: 'retry'` is equivalent to `onFailure: 'stop'`.
-- **Callable listeners are always sync** — async requires a class name string.
-
-### CLI Tool & Database Migrations
-- **CLI Commands**: Standard CLI tasks are executed using the root `spartan` console tool.
-  ```bash
-  # Run pending migrations in database/migrations/
-  php spartan migrate
-
-  # Seed database using database/seed.sql
-  php spartan db:seed
-
-  # Start the background worker for async events
-  php spartan worker [--loop]
-  ```
-- **Migrations Structure**: Database schema definitions live under `database/migrations/` as sequenced SQL files (e.g. `0001_create_jobs_table.sql`).
-- **Dialect Portability**: Write migration SQL using standard MySQL syntax. The `Migrator` automatically translates dialect structures (such as auto-increment and default values) when resolving queries on SQLite connections during testing.
-
-### Middleware & Rate Limiting
-- **Rule**: Middlewares inspect and filter incoming HTTP requests. They can abort request resolution early (e.g. on redirects, authorization failure, or rate limiting) to bypass executing controller callbacks.
-- **Alias Mapping**: Register aliases in the Router constructor or dynamically via `$router->aliasMiddleware('name', MiddlewareClass::class)`.
-- **Parameterized Middlewares**: Specify parameters after a colon: e.g. `'rate_limit:60,60'`. Parameters are passed directly to the constructor of the middleware.
-- **Rate Limit Middleware (`rate_limit:limit,window`)**:
-  - Automatically mapped to `App\Middlewares\RateLimitMiddleware`.
-  - Tracks requests per client IP (`Request::getIp()`) and route path.
-  - Returns `429 Too Many Requests` when limit is exceeded and sets headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After`.
-  - Uses the Cache layer (`Cache::get` and `Cache::put`).
-  ```php
-  // Register in routes/web.php or routes/api.php
-  $router->get('/api/resource', [ApiController::class, 'index'], ['rate_limit:100,60']);
-  ```
-
-### Global Exception Handler
-- **Rule**: All application errors and exceptions are routed through the global `App\Core\ExceptionHandler` to prevent raw server leakage.
-- **Customization**: To swap or customize how errors are rendered (e.g. returning JSON for API routes vs error page templates), bind your custom class in the container:
-  ```php
-  use App\Core\ExceptionHandler;
-  
-  Application::$app->container->singleton(ExceptionHandler::class, fn() => new MyCustomExceptionHandler());
-  ```
-
-### Daily PSR-3 Logger
-- **Rule**: Standard daily-rotated log tracking is handled natively by `App\Core\Logger` supporting standard levels (debug, info, notice, warning, error, critical, alert, emergency) and context placeholder interpolation.
-- **Accessing the Logger**: Use `Application::$app->logger` or resolve `Logger::class` from the Service Container.
-  ```php
-  use App\Core\Logger;
-  
-  // Interpolation: logs "User 123 logged in from 127.0.0.1" in storage/logs/app-YYYY-MM-DD.log
-  Application::$app->logger->info("User {user_id} logged in from {ip}", [
-      'user_id' => 123,
-      'ip' => '127.0.0.1'
-  ]);
-  ```
-- **Error Logs**: Uncaught exceptions are automatically routed to the daily log with full stack trace formatting by `ExceptionHandler`.
-
-### SQL Dialects
-- **Rule**: Spartan supports driver-independent SQL compilation. The `QueryBuilder` automatically detects the active connection driver (e.g., MySQL or SQLite) and uses the corresponding dialect:
-  - **MySQL (`MysqlDialect`)**: Escapes table and column identifiers using backticks (`` ` ``).
-  - **SQLite (`SqliteDialect`)**: Escapes table and column identifiers using double quotes (`"`).
-- **Direct SQL Queries**: Avoid writing hardcoded quotes in raw SQL queries; where quotes are necessary, write driver-aware queries or construct queries programmatically using the `QueryBuilder`.
-
-### FormRequests
-- **Rule**: Input validation and authorization logic can be encapsulated inside dedicated `FormRequest` classes under `src/Controllers/` or custom request folders.
-- **Implementation**: Extend abstract `App\Core\FormRequest`. Define a `rules()` method returning rules mappings and optionally override `authorize()` for route permission checks.
-  ```php
-  namespace App\Controllers\Requests;
-  
-  use App\Core\FormRequest;
-  
-  class StorePostRequest extends FormRequest {
-      public function authorize(): bool {
-          return $this->session->get('role') === 'admin';
-      }
-      public function rules(): array {
-          return [
-              'title' => 'required|string|min:5|max:100',
-              'body'  => 'required|string'
-          ];
-      }
-  }
-  ```
-- **Controller Action Injection**: Type-hint the specific `FormRequest` class in the controller method. The Router will automatically instantiate, validate, and inject the request. If validation fails, it redirects back with flashed errors (for HTML) or returns `422 Unprocessable Content` (for AJAX).
-  ```php
-  public function store(StorePostRequest $request) {
-      $data = $request->getBody(); // contains validated parameters
-      // ...
-  }
-  ```
-
-- **Role-Based Access Control (RBAC) & Policies**:
-  - **Rule**: Secure endpoints and resources by enforcing roles, permissions, and entity-specific policies.
-  - **Attributes**: Annotate controllers or actions using attributes `App\Core\Attributes\RequireRole` and `App\Core\Attributes\RequirePermission`.
-    ```php
-    use App\Core\Attributes\RequireRole;
-    use App\Core\Attributes\RequirePermission;
-
-    #[RequireRole('admin', 'editor')] // Enforces roles on all actions
-    class PostController extends Controller {
-        #[RequirePermission('publish_post')] // Enforces specific permission
-        public function publish() {}
-    }
-    ```
-  - **User Traits**: The authenticated user model (`App\Models\User`) uses `App\Core\Traits\HasAuthorization` which defines relationship checks like `$user->hasRole('slug')`, `$user->hasPermission('slug')`, and `$user->assignRole('slug')`.
-  - **Gate & Policies**: Register custom ability checks or resource policy bindings:
-    ```php
-    use App\Core\Gate;
-
-    Gate::define('edit-settings', fn($user) => $user->hasRole('admin'));
-    Gate::policy(Post::class, PostPolicy::class);
-
-    // Perform checks
-    if (Gate::allows('update', $post)) { ... }
-    if (Gate::denies('update', $post)) { ... }
-    ```
-  - **Blade Template Directives**: In Blade views, conditionally render content using `@can`, `@cannot`, and `@role` directives:
-    ```html
-    @can('update', $post)
-        <a href="/post/{{ $post->id }}/edit">Edit</a>
-    @endcan
-
-    @role('admin')
-        <button>Delete</button>
-    @endrole
-    ```
 
 ---
 
-## 4. Workflow to Add a New Feature
+## Relationships
 
-When the developer requests a new feature (e.g. "Add a blog detail page"), follow these steps:
-1. **Define Route**: Register in the appropriate `routes/` file (`web.php`, `admin.php`, or `api.php`). Include Middlewares as the third argument.
-2. **Register Services/Listeners** (if needed): Add Container bindings and Event listeners in the route file or a boot file.
-3. **Create/Update Model**: If database integration is required, create the model in `src/Models/`. Use `$this->table()->...` — never raw SQL.
-4. **Create Service** (if needed): For complex multi-step logic, create a `src/Services/MyService.php`. Register it in the Container.
-5. **Create Controller Action**: Fetch inputs via `$this->request`, resolve services via `$this->make()`, query Models, dispatch events via `$this->event()`, return rendered view or JSON.
-6. **Create View Template**: Create `.blade.php` in `src/Views/` to use the built-in native Blade compiler (supports `@csrf`, `@flash`, `@escape`, and `{{ $var }}` auto-escaping), or `.php` to write native PHP templates (requires manual `$this->escape()` and `<?= $this->csrfToken() ?>`).
-7. **Cache where applicable**: Wrap expensive database reads in `Cache::remember()` with a sensible TTL.
+```php
+// Define in Model
+public function orders(): RelationQuery { return $this->hasMany(Order::class, foreignKey: 'user_id'); }
+public function profile(): RelationQuery { return $this->hasOne(Profile::class, foreignKey: 'user_id'); }
+public function user(): RelationQuery   { return $this->belongsTo(User::class, foreignKey: 'user_id'); }
+
+// Single record
+$orders = (new User)->orders()->for($user);    // array
+$user   = (new Order)->user()->for($order);    // array or null
+
+// Eager load — 2 queries total, never N+1
+$users = (new User)->orders()->loadFor($users, as: 'orders');
+$orders = (new Order)->user()->loadFor($orders, as: 'user');
+// ❌ NEVER call for() inside a foreach loop
+```
 
 ---
 
-## 5. Views & Frontend Standards (V)
+## Validation
 
-- **Native Blade Engine**: The Blade rendering engine is implemented natively inside the core (`src/Core/View.php`), extracted from the spirit of the previous BladeOne library to maintain complete syntax compatibility. It uses regex compilation and recursive PCRE patterns to support layout inheritance, section buffering, loops, conditional evaluations, and partial includes without requiring any external dependencies (like eftec/bladeone).
-- **Preferred Template Format**: Always prioritize using Blade templates (`.blade.php`) over native PHP templates (`.php`) for any new user interfaces or pages. Native PHP templates are maintained strictly as fallback.
-- **Strict Layout Inheritance**: All Blade views that serve complete pages MUST extend a base layout using `@extends('layouts.main_blade')` (or equivalent) and define content blocks inside `@section('content')` and `@endsection`.
-- **Zero Raw Echoes**: Never use raw echoes (`<?= $var ?>`, `echo`, or `{!! $var !!}`) inside templates unless the variable is specifically marked as safe HTML. For everything else:
-  - In Blade, use double curly braces `{{ $var }}` (which automatically runs HTML escaping via the built-in compiler) or `@escape($var)`.
-  - In native PHP templates, use `$this->escape($var)`.
-- **Form Safety**: Every single HTML `<form>` that makes a POST request MUST include the CSRF protection directive:
-  - `@csrf` in Blade templates.
-  - `<?= $this->csrfToken() ?>` in native PHP templates.
-- **HTMX Partial Swaps**: Any route/controller action triggered by HTMX (e.g. `hx-get`, `hx-post`) that expects a targeted swap inside a page container MUST return ONLY the partial HTML code.
-  - The controller MUST return the view using `$this->renderViewOnly('template_name', $data)`.
-  - Never return a full layout page for HTMX swaps, as it duplicates headers/scripts and breaks the DOM.
-- **Global View Variables & authUser**:
-  - Global variables can be shared across all views dynamically via `View::share()` or Controller `$this->share()`.
-  - Every rendered view is automatically injected with the `$authUser` variable (representing the logged-in `User` instance, or `null` if the user is a guest) to prevent "Undefined variable" warnings when rendering conditional auth checks (e.g., `@if($authUser)`).
-- **Alpine.js for Client State**: Keep JavaScript in templates minimal. Use Alpine.js (`x-data`, `x-init`, `x-model`, `x-on`) for interactive client-side components (like toggle menus, counters, notifications, and client calculations). Avoid inline raw jQuery or heavy vanilla `<script>` tags.
+```php
+$v = $this->validate($this->request->getBody(), [
+    'email'    => 'required|email|unique:users,email',
+    'password' => 'required|min:8|max:64',
+    'phone'    => 'nullable|string|min:7',
+    'slug'     => 'required|regex:/^[a-z0-9-]+$/',
+]);
+if ($v->fails()) {
+    return $this->render('form', ['errors' => $v->errors()]);
+}
+```
 
+Rules: `required`, `string`, `integer`, `boolean`, `numeric`, `email`, `url`, `date`, `alpha`, `alpha_num`, `min:N`, `max:N`, `confirmed`, `in:a,b,c`, `nullable`, `regex:/pattern/`, `unique:table,column`
+
+Every form view MUST display validation errors when present.
+
+---
+
+## Session & Auth
+
+```php
+$this->session->set('key', $value);
+$this->session->get('key');
+$this->session->regenerate();        // REQUIRED after login or privilege change
+$this->session->setFlash('status', 'Saved!');
+
+// Auth (AuthInterface)
+$this->auth->check();   // bool
+$this->auth->id();      // user ID
+$this->auth->user();    // hydrated User model or null
+```
+
+---
+
+## Routes
+
+```php
+// routes/web.php — public
+$app->router->get('/', [HomeController::class, 'index']);
+$app->router->post('/contact', [HomeController::class, 'contact']);
+$app->router->get('/item/{id}', [ItemController::class, 'show']);
+
+// routes/admin.php — protected
+$app->router->get('/admin', [AdminController::class, 'index'], ['admin_auth']);
+
+// Middleware groups
+$app->router->middlewareGroup('admin_auth', [SecurityHeadersMiddleware::class, AuthMiddleware::class]);
+
+// CSRF exclusions (webhooks, stateless API)
+$app->router->excludeCsrf('/api/webhook', '/api/v1/*');
+
+// Method spoofing (forms are GET/POST only)
+// <input type="hidden" name="_method" value="DELETE">
+```
+
+---
+
+## Middlewares
+
+```php
+// Create in src/Middlewares/, extend App\Core\Middleware
+class MyMiddleware extends Middleware {
+    public function execute(Request $request, Response $response): void { ... }
+}
+
+// Register on route
+$app->router->get('/path', [Controller::class, 'action'], [MyMiddleware::class, 'rate_limit:60,60']);
+```
+
+---
+
+## Views (Blade preferred)
+
+```blade
+@extends('layouts.main_blade')
+@section('content')
+    <p>{{ $name }}</p>         {{-- auto-escaped --}}
+    {!! $safeHtml !!}          {{-- raw — only when explicitly safe --}}
+    @escape($var)
+    @csrf                      {{-- required in every POST form --}}
+    @flash('status')
+    @if($authUser) ... @endif
+    @can('edit', $post) ... @endcan
+    @role('admin') ... @endrole
+    @include('partials.card', ['item' => $item])
+@endsection
+```
+
+Native PHP templates: use `$this->escape($var)` and `<?= $this->csrfToken() ?>`.  
+HTMX partials: use `$this->renderViewOnly(...)` — never return full layout.
+
+---
+
+## Events & Listeners
+
+```php
+// Register (in routes/ or boot file)
+Application::$app->events->listen('order.placed', UpdateInventory::class);           // sync
+Application::$app->events->listen('order.placed', SendSms::class, async: true, maxAttempts: 3, onFailure: 'retry');
+
+// Dispatch from Controller
+$this->event('order.placed', $orderData);
+
+// Listener class
+class SendSms {
+    public function handle(mixed $payload): void { ... }
+}
+```
+
+Side effects (SMS, email, HTTP calls, file generation) → always async.
+
+---
+
+## Cache
+
+```php
+$data = Cache::remember('key', 3600, fn() => $this->table()->get());
+Cache::put('key', $value, 600);
+Cache::get('key', 'default');
+Cache::forget('key');
+Cache::flush();
+```
+
+Default: file driver. Switch: `CACHE_DRIVER=redis` in `.env`.
+
+---
+
+## Authorization (RBAC)
+
+```php
+// Attributes on controller or method
+#[RequireRole('admin')]
+#[RequirePermission('publish_post')]
+
+// Gate
+Gate::define('edit-settings', fn($user) => $user->hasRole('admin'));
+Gate::allows('edit-settings');
+Gate::denies('edit-settings');
+Gate::policy(Post::class, PostPolicy::class);
+
+// User model (HasAuthorization trait)
+$user->hasRole('admin');
+$user->hasPermission('publish_post');
+$user->assignRole('editor');
+```
+
+---
+
+## CLI
+
+```bash
+php spartan migrate       # run pending migrations
+php spartan db:seed       # seed database
+php spartan worker        # process job queue (single pass)
+php spartan worker --loop # process job queue (daemon, every 5s)
+```
+
+---
+
+## Logger
+
+```php
+Application::$app->logger->info("User {id} logged in", ['id' => $userId]);
+Application::$app->logger->error("Payment failed", ['order' => $orderId]);
+// Levels: debug, info, notice, warning, error, critical, alert, emergency
+// Output: storage/logs/app-YYYY-MM-DD.log (rotates at 10MB)
+```
+
+---
+
+## Security Checklist
+
+- [ ] `declare(strict_types=1)` in every file
+- [ ] All output in views is escaped
+- [ ] Every POST form has `@csrf`
+- [ ] `session->regenerate()` called after login
+- [ ] No hardcoded credentials or paths
+- [ ] Validation runs before any DB write
+- [ ] `APP_DEBUG=false` in production `.env`
+- [ ] Upload path from config, not hardcoded
+- [ ] No user input passed directly to `$this->render()` or `$this->redirect()`
