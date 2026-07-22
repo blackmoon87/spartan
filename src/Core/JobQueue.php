@@ -100,19 +100,22 @@ class JobQueue
      */
     private function fetchPending(): array
     {
-        // Lock rows during selection to prevent race conditions
+        // Lock rows during selection to prevent race conditions (for MySQL/PostgreSQL)
         $this->db->beginTransaction();
 
         try {
+            $driver = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+            $forUpdate = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+            $now = date('Y-m-d H:i:s');
+
             $stmt = $this->db->prepare(
                 "SELECT * FROM jobs
                   WHERE status = 'pending'
-                    AND run_at <= NOW()
+                    AND run_at <= ?
                   ORDER BY run_at ASC
-                  LIMIT 50
-                  FOR UPDATE"
+                  LIMIT 50" . $forUpdate
             );
-            $stmt->execute();
+            $stmt->execute([$now]);
             $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (!empty($jobs)) {
