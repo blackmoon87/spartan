@@ -55,6 +55,7 @@ class View implements ViewInterface
      */
     public function render(string $view, array $params = []): string
     {
+        $view = str_replace('.', '/', $view);
         if (!preg_match('#^[a-zA-Z0-9_/]+$#', $view)) {
             throw new \InvalidArgumentException(
                 "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."
@@ -81,6 +82,7 @@ class View implements ViewInterface
      */
     public function renderViewOnly(string $view, array $params = []): string
     {
+        $view = str_replace('.', '/', $view);
         if (!preg_match('#^[a-zA-Z0-9_/]+$#', $view)) {
             throw new \InvalidArgumentException(
                 "Invalid view name [{$view}]. Only alphanumeric characters, underscores, and forward slashes are allowed."

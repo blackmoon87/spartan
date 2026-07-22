@@ -10,7 +10,7 @@ class Session implements SessionInterface
 
     public function __construct(?Request $request = null)
     {
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             // Harden the session cookie before starting the session:
             //   HttpOnly  — JavaScript (document.cookie) cannot read the session ID
             //   SameSite  — Lax prevents the cookie being sent on cross-site POST requests
