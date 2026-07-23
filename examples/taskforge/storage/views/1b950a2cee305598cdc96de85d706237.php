@@ -1,7 +1,6 @@
 <?php $this->extend('layouts/app'); ?>
 
-<?php $this->startSection('title', 'Login — TaskForge'); ?>
-
+<?php $this->sections[trim('title', "'\"")] = 'Login — TaskForge'; ?>
 <?php $this->startSection('content'); ?>
 <div style="max-width: 420px; margin: 60px auto;">
     <div class="card">

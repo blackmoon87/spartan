@@ -1,7 +1,6 @@
 <?php $this->extend('layouts/app'); ?>
 
-<?php $this->startSection('title', $title ?? 'Dashboard'); ?>
-
+<?php $this->sections[trim('title', "'\"")] = $title ?? 'Dashboard'; ?>
 <?php $this->startSection('content'); ?>
 <h1 style="margin-bottom: 24px;">📊 Dashboard</h1>
 

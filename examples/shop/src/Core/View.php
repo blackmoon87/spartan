@@ -176,6 +176,9 @@ class View implements ViewInterface
         $content = preg_replace('/\{\{\s*(.+?)\s*\}\}/s', '<?php echo htmlspecialchars(($1) ?? \'\', ENT_QUOTES, \'UTF-8\'); ?>', $content);
         $content = preg_replace('/\{!!\s*(.+?)\s*!!\}/s', '<?php echo $1; ?>', $content);
         $content = preg_replace('/@extends\s*\((.*?)\)/', '<?php $this->extend($1); ?>', $content);
+        // Inline section: @section('name', expression) — no @endsection needed
+        $content = preg_replace('/@section\s*\(\s*([\'"][^\'"]+[\'"])\s*,\s*(.+?)\s*\)\s*$/m', '<?php $this->sections[trim($1, "\'\\"")] = $2; ?>', $content);
+        // Block section: @section('name') ... @endsection
         $content = preg_replace('/@section\s*\((.*?)\)/', '<?php $this->startSection($1); ?>', $content);
         $content = preg_replace('/@endsection/', '<?php $this->endSection(); ?>', $content);
         $content = preg_replace('/@yield\s*\((.*?)\)/', '<?php echo $this->yieldContent($1); ?>', $content);
