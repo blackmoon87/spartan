@@ -57,6 +57,14 @@ $config = require_once dirname(__DIR__) . '/config/config.php';
 // Instantiate App
 $app = new Application($config);
 
+// ─── Register Middleware ──────────────────────────────────────────────────────
+$app->router->aliasMiddleware('auth', \App\Middlewares\AuthMiddleware::class);
+$app->router->aliasMiddleware('rate_limit', \App\Middlewares\RateLimitMiddleware::class);
+$app->router->aliasMiddleware('csrf', \App\Middlewares\CsrfMiddleware::class);
+$app->router->setGlobalMiddlewares([
+    \App\Middlewares\CsrfMiddleware::class,
+]);
+
 // ─── Load Routes ──────────────────────────────────────────────────────────────
 // If route cache is enabled and not in debug mode, load from cache.
 $routesPath = dirname(__DIR__) . '/routes';

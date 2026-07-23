@@ -18,16 +18,14 @@ class Router
     {
         $this->request = $request;
         $this->response = $response;
-        
-        $this->middlewareAliases = [
-            'auth' => \App\Middlewares\AuthMiddleware::class,
-            'rate_limit' => \App\Middlewares\RateLimitMiddleware::class,
-            'csrf' => \App\Middlewares\CsrfMiddleware::class,
-        ];
+    }
 
-        $this->globalMiddlewares = [
-            \App\Middlewares\CsrfMiddleware::class,
-        ];
+    /**
+     * Set global middlewares that run on every request.
+     */
+    public function setGlobalMiddlewares(array $middlewares): void
+    {
+        $this->globalMiddlewares = $middlewares;
     }
 
     /**
