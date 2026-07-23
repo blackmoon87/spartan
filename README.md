@@ -4,6 +4,8 @@
 
 A hand-crafted PHP 8.1+ MVC framework built for developers who want to understand every line of their stack. No magic, no bloat — just clean architecture with serious security baked in.
 
+![TaskForge Dashboard](docs/screenshots/taskforge_dashboard.png)
+
 ---
 
 ## What's Inside
@@ -189,6 +191,27 @@ php spartan worker --loop
 ├── .cursorrules                # AI IDE architecture rules
 └── composer.json
 ```
+
+---
+
+## 📸 Screenshots Showcase
+
+### 1. TaskForge — Complete Feature Verification App (`examples/taskforge`)
+Dark-mode SaaS dashboard with task tracking, project metrics, role-based access control (RBAC), and 36 automated unit tests.
+
+![TaskForge Dashboard](docs/screenshots/taskforge_dashboard.png)
+
+### 2. Spartan Blogger — Enterprise Publishing Platform (`examples/blogger`)
+Glassmorphic publication platform featuring article analytics, comment management, clap engine, and HTMX partial swaps.
+
+| Home Page | Article Detail Page |
+|---|---|
+| ![Blogger Home](docs/screenshots/blogger_home.png) | ![Blogger Post](docs/screenshots/blogger_post.png) |
+
+### 3. Spartan Shop — E-Commerce Engine (`examples/shop`)
+Production e-commerce storefront with shopping cart transactions, product listings, and order checkout pipelines.
+
+![Shop Home](docs/screenshots/shop_home.png)
 
 ---
 
