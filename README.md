@@ -29,6 +29,18 @@ A hand-crafted PHP 8.1+ MVC framework built for developers who want to understan
 
 ---
 
+## ⚡ Performance Benchmarks
+
+| Framework | Requests / Sec (RPS) | Latency (Median) | Peak Memory | Cold Boot | Dependency Size |
+|-----------|:--------------------:|:----------------:|:-----------:|:---------:|:---------------:|
+| ⚡ **Spartan** | **1,827 req/s** | **10 ms** | **4.5 MB** | **~2 ms** | **0 KB (0 deps)** |
+| 🪶 **Slim 4** | 1,450 req/s | 13 ms | 5.2 MB | ~4 ms | ~2 MB (7 packages) |
+| 🔴 **Laravel 11** | 380 req/s | 52 ms | 18.5 MB | ~55 ms | ~180 MB (30+ packages) |
+
+👉 Read full benchmarks and stress test report in [BENCHMARKS.md](BENCHMARKS.md).
+
+---
+
 ## Requirements
 
 - PHP **8.1+**
