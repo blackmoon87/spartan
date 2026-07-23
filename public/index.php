@@ -74,5 +74,17 @@ if ($routeCacheEnabled && !$debugMode && $app->router->loadCache()) {
     }
 }
 
-// Start the Application
-$app->run();
+// Start the Application (Supports standard mode and FrankenPHP Worker Mode)
+if (($config['frankenphp_worker'] ?? env('FRANKENPHP_WORKER', false)) && function_exists('frankenphp_handle_request')) {
+    $handler = function () use ($app) {
+        $app->handleRequest();
+    };
+    $maxRequests = (int) (env('FRANKENPHP_MAX_REQUESTS', 1000));
+    for ($nbRequests = 0; frankenphp_handle_request($handler); $nbRequests++) {
+        if ($maxRequests > 0 && $nbRequests >= $maxRequests) {
+            break; // Auto-recycle worker to prevent memory leak
+        }
+    }
+} else {
+    $app->run();
+}

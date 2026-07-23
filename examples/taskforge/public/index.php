@@ -62,5 +62,17 @@ $routesPath = dirname(__DIR__) . '/routes';
 require_once $routesPath . '/web.php';
 require_once $routesPath . '/api.php';
 
-// Start the Application
-$app->run();
+// Start the Application (Supports standard mode and FrankenPHP Worker Mode)
+if (($config['frankenphp_worker'] ?? (getenv('FRANKENPHP_WORKER') === 'true' || ($_ENV['FRANKENPHP_WORKER'] ?? 'false') === 'true')) && function_exists('frankenphp_handle_request')) {
+    $handler = function () use ($app) {
+        $app->handleRequest();
+    };
+    $maxRequests = (int) (getenv('FRANKENPHP_MAX_REQUESTS') ?: ($_ENV['FRANKENPHP_MAX_REQUESTS'] ?? 1000));
+    for ($nbRequests = 0; frankenphp_handle_request($handler); $nbRequests++) {
+        if ($maxRequests > 0 && $nbRequests >= $maxRequests) {
+            break; // Auto-recycle worker to prevent memory leak
+        }
+    }
+} else {
+    $app->run();
+}

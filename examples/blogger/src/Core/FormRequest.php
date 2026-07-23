@@ -14,6 +14,9 @@ abstract class FormRequest extends Request
         if (isset(Application::$app)) {
             $this->session = Application::$app->session;
             $this->auth    = Application::$app->auth;
+        } else {
+            $this->session = new Session();
+            $this->auth    = new Auth($this->session);
         }
     }
 

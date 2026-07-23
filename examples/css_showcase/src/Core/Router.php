@@ -45,6 +45,14 @@ class Router
     }
 
     /**
+     * Dynamically swap responses.
+     */
+    public function setResponse(Response $response): void
+    {
+        $this->response = $response;
+    }
+
+    /**
      * Define a middleware group.
      */
     public function middlewareGroup(string $name, array $middlewares): void

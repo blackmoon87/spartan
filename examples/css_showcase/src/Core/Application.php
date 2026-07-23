@@ -92,6 +92,36 @@ class Application
     }
 
     /**
+     * Handle incoming request for Worker Mode (FrankenPHP, RoadRunner, Swoole)
+     * Resets transient per-request state while retaining booted services.
+     */
+    public function handleRequest(?Request $request = null): void
+    {
+        if ($request !== null) {
+            $this->request = $request;
+            $this->router->setRequest($request);
+        }
+        $this->response = new Response();
+        $this->router->setResponse($this->response);
+
+        $this->run();
+
+        // Reset transient state post execution to prevent memory accumulation
+        $this->resetPerRequestState();
+    }
+
+    /**
+     * Reset per-request state to prevent memory leak in worker mode.
+     */
+    public function resetPerRequestState(): void
+    {
+        // Clear container non-singleton transient instances if any
+        if (isset($this->session)) {
+            $this->session->removeFlashMessages();
+        }
+    }
+
+    /**
      * Magic getter to support lazy-loading of the database connection.
      */
     public function __get(string $name)

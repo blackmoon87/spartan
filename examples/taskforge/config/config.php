@@ -29,4 +29,6 @@ return [
     'router' => [
         'cache_enabled' => false,
     ],
+
+    'frankenphp_worker' => false, // Set to true or FRANKENPHP_WORKER=true in .env to enable ultra-fast Worker Mode
 ];
