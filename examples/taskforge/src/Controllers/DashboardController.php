@@ -32,7 +32,7 @@ class DashboardController extends Controller
             ->join('tasks', 'tasks.project_id', '=', 'projects.id')
             ->select('projects.name, projects.slug, COUNT(tasks.id) as task_count')
             ->groupBy('projects.id')
-            ->having('task_count', '>', 1)
+            ->having('task_count', 1, '>')
             ->orderBy('task_count', 'DESC')
             ->limit(5)
             ->get();
