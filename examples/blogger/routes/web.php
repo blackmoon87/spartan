@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Controllers\AuthController;
 use App\Controllers\AuthorPostController;
 use App\Controllers\BlogController;
 use App\Controllers\CommentController;
@@ -13,6 +14,11 @@ use App\Listeners\PingSearchEnginesListener;
 use App\Listeners\UpdatePostMetricsListener;
 
 /** @var Application $app */
+
+// Authentication Routes
+$app->router->get('/login', [AuthController::class, 'showLogin']);
+$app->router->post('/login', [AuthController::class, 'processLogin']);
+$app->router->get('/logout', [AuthController::class, 'logout']);
 
 // Public Blog Routes
 $app->router->get('/', [BlogController::class, 'index']);
