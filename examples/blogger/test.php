@@ -7,6 +7,10 @@ declare(strict_types=1);
  */
 
 // 1. PSR-4 Autoloader
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 spl_autoload_register(function (string $class): void {
     $prefix  = 'App\\';
     $baseDir = __DIR__ . '/src/';
@@ -228,6 +232,10 @@ try {
     $authorHtml = $app->router->resolve();
     ob_end_clean();
     assertTest("RBAC Authorization & Attribute Checks (#[RequireRole])", str_contains((string)$authorHtml, 'Author Publishing Portal'), "Authorized author user to access protected endpoint");
+
+    // 24. Third-Party Composer Library Integration
+    $humanTime = \Carbon\Carbon::now()->subMinutes(15)->diffForHumans();
+    assertTest("Third-Party Composer Library Integration (nesbot/carbon)", str_contains($humanTime, 'ago') || str_contains($humanTime, 'minute'), "Formatted time via Carbon: {$humanTime}");
 
     echo "\n-------------------------------------------------------------------\n";
     echo " TEST RESULTS: {$passedCount} Passed, {$failedCount} Failed\n";
