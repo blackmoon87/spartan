@@ -80,5 +80,5 @@
 <div class="card" style="border-color: var(--border); opacity: .6;">
     <p style="color:var(--text-muted); font-size:.85rem;">🔒 Admin panel access requires <code>manage_users</code> permission.</p>
 </div>
-<?php endif; ?>not
+<?php endif; ?>
 <?php $this->endSection(); ?>

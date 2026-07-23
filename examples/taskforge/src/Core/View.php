@@ -206,11 +206,11 @@ class View implements ViewInterface
         $content = preg_replace('/@empty\s*(\((?>[^()]+|(?1))*\))/', '<?php if(empty$1): ?>', $content);
         $content = preg_replace('/@endempty/', '<?php endif; ?>', $content);
 
-        // Custom Authorization Directives
-        $content = preg_replace('/@can\s*(\((?>[^()]+|(?1))*\))/', '<?php if(\App\Core\Gate::check$1): ?>', $content);
+        // Custom Authorization Directives (order matters: @cannot before @can to prevent partial match)
         $content = preg_replace('/@cannot\s*(\((?>[^()]+|(?1))*\))/', '<?php if(\App\Core\Gate::denies$1): ?>', $content);
-        $content = preg_replace('/@endcan/', '<?php endif; ?>', $content);
         $content = preg_replace('/@endcannot/', '<?php endif; ?>', $content);
+        $content = preg_replace('/@can\s*(\((?>[^()]+|(?1))*\))/', '<?php if(\App\Core\Gate::check$1): ?>', $content);
+        $content = preg_replace('/@endcan/', '<?php endif; ?>', $content);
 
         $content = preg_replace('/@role\s*(\((?>[^()]+|(?1))*\))/', '<?php if(($__user = \App\Core\Gate::resolveUser()) && method_exists($__user, \'hasRole\') && $__user->hasRole$1): ?>', $content);
         $content = preg_replace('/@endrole/', '<?php endif; ?>', $content);
