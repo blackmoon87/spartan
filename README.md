@@ -4,7 +4,7 @@
 
 A hand-crafted PHP 8.1+ MVC framework built for developers who want to understand every line of their stack. No magic, no bloat — just clean architecture with serious security baked in.
 
-![TaskForge Dashboard](docs/screenshots/taskforge_dashboard.png)
+![TaskForge Dashboard](docs/screenshots/taskforge_dashboard_v3.png)
 
 ---
 
@@ -199,26 +199,26 @@ php spartan worker --loop
 ### 1. TaskForge — Complete Feature Verification App (`examples/taskforge`)
 Dark-mode SaaS dashboard with task tracking, project metrics, role-based access control (RBAC), and 36 automated unit tests.
 
-![TaskForge Dashboard](docs/screenshots/taskforge_dashboard.png)
+![TaskForge Dashboard](docs/screenshots/taskforge_dashboard_v3.png)
 
 ### 2. Spartan Blogger — Enterprise Publishing Platform (`examples/blogger`)
 Glassmorphic publication platform featuring article analytics, comment management, clap engine, and HTMX partial swaps.
 
 | Home Page | Article Detail Page |
 |---|---|
-| ![Blogger Home](docs/screenshots/blogger_home_v2.png) | ![Blogger Post](docs/screenshots/blogger_post_v2.png) |
+| ![Blogger Home](docs/screenshots/blogger_home_v3.png) | ![Blogger Post](docs/screenshots/blogger_post_v3.png) |
 
 ### 3. Spartan Shop — E-Commerce Engine (`examples/shop`)
 Production e-commerce storefront with shopping cart transactions, product listings, and order checkout pipelines.
 
-![Shop Home](docs/screenshots/shop_home.png)
+![Shop Home](docs/screenshots/shop_home_v3.png)
 
 ### 4. CSS Multi-Support & Interactive Motion Showcase (`examples/css_showcase`)
 High-end UI component suite rendering Tailwind CSS, Open Props, auto-advancing carousel sliders, CSS shimmer keyframe loaders, and responsive aspect-ratio media galleries.
 
 | Interactive Sliders & Keyframe Motion | Tailwind CSS Component Suite |
 |---|---|
-| ![Interactive Motion](docs/screenshots/css_motion_interactive.png) | ![Tailwind Suite](docs/screenshots/css_tailwind_suite.png) |
+| ![Interactive Motion](docs/screenshots/css_motion_interactive_v3.png) | ![Tailwind Suite](docs/screenshots/css_tailwind_suite_v3.png) |
 
 ---
 
