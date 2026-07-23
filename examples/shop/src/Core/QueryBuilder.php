@@ -293,7 +293,7 @@ class QueryBuilder
     public function count(): int
     {
         [$whereSQL, $bindings] = $this->buildWhere();
-        $sql  = "SELECT COUNT(*) as cnt FROM `{$this->table}`";
+        $sql  = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table);
         $sql .= $whereSQL;
         $stmt = $this->execute($sql, $bindings);
         return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0);

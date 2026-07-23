@@ -58,6 +58,8 @@ try {
     // 1. Boot Application
     $config = require __DIR__ . '/config/config.php';
     $app = new Application($config);
+    $app->router->aliasMiddleware('auth', \App\Middlewares\AuthMiddleware::class);
+    $app->router->aliasMiddleware('csrf', \App\Middlewares\CsrfMiddleware::class);
     assertTest("Application Bootstrapping", isset(Application::$app), "Config loaded with SQLite driver");
 
     // 2. Database Migrations
