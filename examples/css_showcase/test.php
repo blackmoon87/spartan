@@ -102,6 +102,17 @@ assertCondition(
     'Resolved relative path: ' . $assetCssPath
 );
 
+// Test 6: Interactive Carousel Slider, Gallery & Shimmer Keyframes Route
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['REQUEST_URI'] = '/interactive';
+$app->router->setRequest(new Request());
+$htmlInteractive = $app->router->resolve();
+assertCondition(
+    str_contains($htmlInteractive, 'Interactive Sliders, Carousels & CSS Keyframe Motion') && str_contains($htmlInteractive, 'slider-container') && str_contains($htmlInteractive, 'shimmer-box'),
+    '6. Interactive Image Slider Carousel & Shimmer Skeleton Compilation',
+    'Rendered auto-advancing slider, aspect-ratio gallery & shimmer keyframe loaders'
+);
+
 echo "\n───────────────────────────────────────────────────────────────────\n";
 echo " TEST RESULTS: {$testsPassed} Passed, {$testsFailed} Failed\n";
 echo "───────────────────────────────────────────────────────────────────\n\n";

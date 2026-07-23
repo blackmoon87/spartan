@@ -26,5 +26,11 @@
         <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0 1rem 0;">Awwwards & Godly style dark-mode glassmorphic cards and micro-animations.</p>
         <a href="/vanilla" style="color: var(--accent); font-weight: 600; text-decoration: none;">View Vanilla Demo →</a>
     </div>
+
+    <div class="glass-card">
+        <h3>✨ Sliders, Motion & Gallery</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0 1rem 0;">Interactive carousel sliders, aspect-ratio zoom media, and CSS shimmer keyframes.</p>
+        <a href="/interactive" style="color: var(--accent); font-weight: 600; text-decoration: none;">View Motion Demo →</a>
+    </div>
 </div>
 @endsection

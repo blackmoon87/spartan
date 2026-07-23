@@ -106,4 +106,38 @@ class CssShowcaseController extends Controller
             ]
         ]);
     }
+
+    public function interactive(): string
+    {
+        return $this->render('showcase/interactive', [
+            'title' => 'Interactive Animations, Image Sliders & Motion Showcase',
+            'activeEngine' => 'Interactive & Motion',
+            'slides' => [
+                [
+                    'title' => 'Next-Gen Agentic AI Coding Engine',
+                    'tagline' => 'Autonomous Code Generation & Multi-File Orchestration',
+                    'gradient' => 'linear-gradient(135deg, #4f46e5, #06b6d4)',
+                    'tag' => 'AI Architecture',
+                ],
+                [
+                    'title' => 'Zero-Dependency PHP 8.1+ Framework Kernel',
+                    'tagline' => 'Sub-Millisecond Routing & 2ms Cold Boot Performance',
+                    'gradient' => 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                    'tag' => 'High Performance',
+                ],
+                [
+                    'title' => 'Hardware-Accelerated CSS3 Glassmorphism',
+                    'tagline' => 'Awwwards & Godly Aesthetic Motion Design Standard',
+                    'gradient' => 'linear-gradient(135deg, #10b981, #3b82f6)',
+                    'tag' => 'Motion & Design',
+                ],
+            ],
+            'gallery' => [
+                ['title' => 'Neural Vector Search System', 'category' => 'AI Engine', 'aspect' => '16/9', 'color' => '#6366f1'],
+                ['title' => 'Distributed Job Queue Daemon', 'category' => 'Infrastructure', 'aspect' => '16/9', 'color' => '#10b981'],
+                ['title' => 'Blade Template Compiler', 'category' => 'View Layer', 'aspect' => '16/9', 'color' => '#ec4899'],
+                ['title' => 'Dialect SQL Auto-Translator', 'category' => 'Database', 'aspect' => '16/9', 'color' => '#f59e0b'],
+            ]
+        ]);
+    }
 }
