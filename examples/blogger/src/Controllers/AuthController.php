@@ -23,17 +23,21 @@ class AuthController extends Controller
 
         $user = (new User())->findInstanceBy('email', $email);
 
-        if (!$user) {
+        if (!$user || !password_verify($password, (string)$user->password)) {
             $this->session->setFlash('warning', 'Invalid credentials specified.');
             $this->redirect('/login');
             return;
         }
 
+        // Regenerate session to prevent fixation
+        $this->session->regenerate();
+
         // Authenticate user
         $this->session->set('user_id', (int)$user->id);
-        
-        // Resolve user role
-        $role = ((int)$user->id === 1) ? 'admin' : 'author';
+
+        // Resolve user role from DB (via HasAuthorization trait)
+        $roles = $user->getRoles();
+        $role  = $roles[0] ?? 'author';
         $this->session->set('role', $role);
 
         $this->session->setFlash('success', "Welcome back, {$user->name}!");

@@ -11,11 +11,11 @@ INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (1, 1);
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (1, 2);
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (2, 1);
 
--- Seed Users
+-- Seed Users (password: 'password')
 INSERT OR IGNORE INTO users (id, name, email, password) VALUES 
-(1, 'Elena Rostova', 'elena@blogger.com', '$2y$10$p4s5P6w7Q8r9S0t1U2v3e.Jg2h3i4j5k6l7m8n9o0p1q2r3s4t5u6');
+(1, 'Elena Rostova', 'elena@blogger.com', '$2y$12$YBa9h/Kv0PETj7EsruGVx.MuP3C3a9GNLH3U0T7mZCTbRyKxC0xUO');
 INSERT OR IGNORE INTO users (id, name, email, password) VALUES 
-(2, 'Marcus Vance', 'marcus@blogger.com', '$2y$10$p4s5P6w7Q8r9S0t1U2v3e.Jg2h3i4j5k6l7m8n9o0p1q2r3s4t5u6');
+(2, 'Marcus Vance', 'marcus@blogger.com', '$2y$12$YBa9h/Kv0PETj7EsruGVx.MuP3C3a9GNLH3U0T7mZCTbRyKxC0xUO');
 
 -- Assign Roles to Users
 INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (1, 1);
