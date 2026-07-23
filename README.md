@@ -206,7 +206,7 @@ Glassmorphic publication platform featuring article analytics, comment managemen
 
 | Home Page | Article Detail Page |
 |---|---|
-| ![Blogger Home](docs/screenshots/blogger_home.png) | ![Blogger Post](docs/screenshots/blogger_post.png) |
+| ![Blogger Home](docs/screenshots/blogger_home_v2.png) | ![Blogger Post](docs/screenshots/blogger_post_v2.png) |
 
 ### 3. Spartan Shop — E-Commerce Engine (`examples/shop`)
 Production e-commerce storefront with shopping cart transactions, product listings, and order checkout pipelines.
