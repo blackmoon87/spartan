@@ -3,8 +3,19 @@
 @section('content')
 <article class="glass-card" style="margin-bottom: 2.5rem; padding: 3rem 2.5rem;">
     <h1 style="font-size: 2.4rem; font-weight: 800; margin-bottom: 1rem; line-height: 1.2;">{{ $post->title }}</h1>
-    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-        <span>Published {{ $post->created_at }}</span> &bull; <span>👁️ {{ $post->views }} views</span>
+    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span>Published {{ $post->created_at }}</span> &bull; <span>👁️ {{ $post->views }} views</span>
+        </div>
+        
+        <!-- Live HTMX Clap/Like Button -->
+        <button hx-post="/like/toggle" 
+                hx-vals='{"post_id": {{ $post->id }}, "_csrf": "{{ $_SESSION["_csrf_token"] ?? "" }}"}'
+                hx-swap="outerHTML" 
+                class="btn" 
+                style="background: rgba(168, 85, 247, 0.2); border: 1px solid var(--primary); color: #fff; padding: 0.4rem 1rem; font-size: 0.9rem;">
+            👏 Clap Article
+        </button>
     </div>
 
     <div style="font-size: 1.1rem; line-height: 1.8; color: #e2e8f0; margin-bottom: 2rem;">
@@ -12,6 +23,22 @@
         <div style="white-space: pre-line;">{{ $post->content }}</div>
     </div>
 </article>
+
+<!-- Newsletter Subscription Card -->
+<div class="glass-card" style="margin-bottom: 2.5rem; text-align: center; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.15) 100%);">
+    <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Enjoyed this article?</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Subscribe to get the latest systems architecture & AI insights delivered straight to your inbox.</p>
+    
+    <div id="newsletter-form-container" style="max-width: 500px; margin: 0 auto;">
+        <form hx-post="/newsletter/subscribe" hx-target="#newsletter-form-container" hx-swap="innerHTML">
+            @csrf
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="email" name="email" placeholder="Enter your email..." required style="flex: 1; padding: 0.75rem 1rem; background: rgba(9,13,22,0.8); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; outline: none;">
+                <button type="submit" class="btn">Subscribe</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Comments Section -->
 <section class="glass-card">

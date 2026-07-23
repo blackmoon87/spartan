@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Controllers\AuthorPostController;
 use App\Controllers\BlogController;
 use App\Controllers\CommentController;
+use App\Controllers\LikeController;
+use App\Controllers\NewsletterController;
 use App\Core\Application;
 use App\Listeners\NotifySubscribersListener;
 use App\Listeners\PingSearchEnginesListener;
@@ -18,6 +20,8 @@ $app->router->get('/category/{slug}', [BlogController::class, 'category']);
 $app->router->post('/blog/search', [BlogController::class, 'search']);
 $app->router->get('/post/{slug}', [BlogController::class, 'show']);
 $app->router->post('/comment/store', [CommentController::class, 'store']);
+$app->router->post('/newsletter/subscribe', [NewsletterController::class, 'subscribe']);
+$app->router->post('/like/toggle', [LikeController::class, 'toggle']);
 
 // Author Publishing Routes
 $app->router->get('/author/posts', [AuthorPostController::class, 'index'], ['auth']);

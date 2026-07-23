@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Spartan Framework Blogger Publishing Platform Comprehensive Test Suite
+ * Spartan Framework Enterprise Blogger Publishing Platform Comprehensive Test Suite
  */
 
 // 1. PSR-4 Autoloader
@@ -24,16 +24,23 @@ use App\Core\Application;
 use App\Core\Database\Migrator;
 use App\Core\JobQueue;
 use App\Core\Request;
+use App\Models\AuditLog;
 use App\Models\Category;
 use App\Models\Comment;
+use App\Models\Newsletter;
 use App\Models\Post;
+use App\Models\PostLike;
 use App\Models\User;
+use App\Services\AnalyticsService;
+use App\Services\AuditService;
 use App\Services\CommentService;
+use App\Services\NewsletterService;
+use App\Services\PostLikeService;
 use App\Services\PostService;
 
-echo "======================================================\n";
-echo "  SPARTAN FRAMEWORK FULL FEATURE TEST SUITE (BLOGGER) \n";
-echo "======================================================\n\n";
+echo "===================================================================\n";
+echo "  SPARTAN FRAMEWORK ENTERPRISE BLOGGER PUBLISHING TEST SUITE      \n";
+echo "===================================================================\n\n";
 
 $passedCount = 0;
 $failedCount = 0;
@@ -64,7 +71,7 @@ try {
     // 2. Database Migrations
     $migrator = new Migrator($app->db, __DIR__ . '/database/migrations');
     $migrator->migrate();
-    assertTest("Database Migrations", true, "Executed 0001, 0002, 0003 migrations on SQLite");
+    assertTest("Database Migrations", true, "Executed 0001, 0002, 0003, 0004 migrations on SQLite");
 
     // 3. Database Seeding
     $seedSql = file_get_contents(__DIR__ . '/database/seed.sql');
@@ -73,7 +80,11 @@ try {
 
     // 4. DI Container Auto-resolution
     $postService = $app->container->make(PostService::class);
-    assertTest("DI Container Resolution", $postService instanceof PostService, "Auto-resolved PostService");
+    $analyticsService = $app->container->make(AnalyticsService::class);
+    $newsletterService = $app->container->make(NewsletterService::class);
+    $likeService = $app->container->make(PostLikeService::class);
+    $auditService = $app->container->make(AuditService::class);
+    assertTest("DI Container Resolution", $postService instanceof PostService && $analyticsService instanceof AnalyticsService, "Auto-resolved PostService, AnalyticsService, NewsletterService, LikeService, AuditService");
 
     // 5. QueryBuilder & Hydrated Models
     $posts = (new Post())->table()->where('featured', 1)->get();
@@ -104,7 +115,25 @@ try {
     $articleComments = (new Post())->comments()->for($article);
     assertTest("HasMany Relationship Fetch (Post -> Comments)", count($articleComments) >= 3, "Fetched " . count($articleComments) . " comments for article #{$article->id}");
 
-    // 9. Event Dispatcher (Sync & Async Queue Push)
+    // 9. Newsletter Subscription Service
+    $sub = $newsletterService->subscribe('developer@spartan.org');
+    assertTest("Newsletter Service Subscription", $sub instanceof Newsletter && $sub->email === 'developer@spartan.org', "Subscribed '{$sub->email}'");
+
+    // 10. Article Like / Clap Service
+    $likeCount = $likeService->toggleLike((int)$article->id, 1, '127.0.0.1');
+    assertTest("Article Like/Clap Service", $likeCount >= 1, "Recorded clap for article ID #{$article->id} (Total: {$likeCount})");
+
+    // 11. Audit Trail Logging Service
+    $auditService->logAction(1, 'article.published', "Article ID: {$newPost->id}");
+    $auditLogs = (new AuditLog())->all();
+    assertTest("Audit Trail Logging", count($auditLogs) >= 1, "Logged administrative action into audit_logs table");
+
+    // 12. Real-time Traffic Analytics Service
+    $analyticsService->logView((int)$article->id, '192.168.1.100', 'Mozilla/5.0');
+    $summary = $analyticsService->getSummary();
+    assertTest("Analytics Logging & Summary", $summary['total_views'] >= 1, "Recorded view and aggregated " . $summary['total_views'] . " views across " . $summary['unique_ips'] . " unique IPs");
+
+    // 13. Event Dispatcher (Sync & Async Queue Push)
     $app->events->listen('post.published', \App\Listeners\UpdatePostMetricsListener::class);
     $app->events->listen('post.published', \App\Listeners\NotifySubscribersListener::class, async: true);
     $app->events->listen('post.published', \App\Listeners\PingSearchEnginesListener::class, async: true);
@@ -112,12 +141,12 @@ try {
     $app->events->dispatch('post.published', ['id' => $newPost->id, 'title' => $newPost->title, 'slug' => $newPost->slug]);
     assertTest("Event Dispatcher (Sync + Async)", true, "Dispatched post.published sync listener & pushed 2 async jobs");
 
-    // 10. Queue Worker Processing
+    // 14. Queue Worker Processing
     $queue = new JobQueue($app->db);
     $processedJobs = $queue->processPending();
     assertTest("Async Job Queue Worker", $processedJobs >= 2, "Processed {$processedJobs} async jobs successfully");
 
-    // 11. Web Route & Controller Action Resolution
+    // 15. Web Route & Controller Action Resolution
     require __DIR__ . '/routes/web.php';
     require __DIR__ . '/routes/api.php';
 
@@ -131,7 +160,7 @@ try {
     ob_end_clean();
     assertTest("Full Page Blade View Render (Blog Home)", str_contains((string)$htmlOutput, 'Systems Architecture'), "Rendered blog home page with glassmorphism layout");
 
-    // 12. HTMX Partial Fragment Swap Render with CSRF Token
+    // 16. HTMX Partial Fragment Swap Render with CSRF Token
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_SERVER['REQUEST_URI']    = '/blog/search';
     $_POST['query']            = 'Reflection';
@@ -144,9 +173,24 @@ try {
     ob_end_clean();
     assertTest("HTMX Partial View Swap (renderViewOnly)", str_contains((string)$partialOutput, 'Understanding Reflection') && !str_contains((string)$partialOutput, '<html>'), "Returned raw HTML partial fragment without layout wrapper");
 
-    // 13. REST JSON API Endpoint
+    // 17. HTMX Newsletter Subscribe AJAX Response
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_SERVER['REQUEST_URI']    = '/newsletter/subscribe';
+    $_POST['email']            = 'htmx_subscriber@spartan.org';
+    $_POST['_csrf']            = $app->session->get('_csrf_token');
+    $_SERVER['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
+    $app->request = new Request();
+    $app->router->setRequest($app->request);
+
+    ob_start();
+    $app->router->resolve();
+    $newsletterRes = ob_get_clean();
+    assertTest("HTMX Newsletter Subscribe AJAX Response", str_contains((string)$newsletterRes, 'Thank you for subscribing'), "Returned inline HTMX success message");
+
+    // 18. REST JSON API Posts Endpoint
     $_POST = [];
     $_GET  = [];
+    unset($_SERVER['HTTP_X_REQUESTED_WITH']);
     $_SERVER['REQUEST_METHOD'] = 'GET';
     $_SERVER['REQUEST_URI']    = '/api/posts';
     $app->request = new Request();
@@ -155,9 +199,19 @@ try {
     $app->router->resolve();
     $jsonOutput = $app->response->getContent();
     $jsonObj = json_decode((string)$jsonOutput, true);
-    assertTest("Stateless REST JSON API Endpoint", isset($jsonObj['status']) && $jsonObj['status'] === 'success', "Returned structured JSON response with " . ($jsonObj['count'] ?? 0) . " items");
+    assertTest("Stateless REST JSON Posts Endpoint", isset($jsonObj['status']) && $jsonObj['status'] === 'success', "Returned structured JSON response with " . ($jsonObj['count'] ?? 0) . " items");
 
-    // 14. RBAC Authorization & Attribute Verification
+    // 19. REST JSON API Analytics Summary Endpoint
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_SERVER['REQUEST_URI']    = '/api/analytics/summary';
+    $app->request = new Request();
+    $app->router->setRequest($app->request);
+
+    $app->router->resolve();
+    $analyticsJson = json_decode((string)$app->response->getContent(), true);
+    assertTest("Stateless REST JSON Analytics Summary Endpoint", isset($analyticsJson['data']['total_views']), "Returned real-time analytics summary metrics");
+
+    // 20. RBAC Authorization & Attribute Verification
     $app->session->set('user_id', 2);
     $app->session->set('role', 'author');
     $authorUser = (new User())->findInstance(2);
@@ -175,9 +229,9 @@ try {
     ob_end_clean();
     assertTest("RBAC Authorization & Attribute Checks (#[RequireRole])", str_contains((string)$authorHtml, 'Author Publishing Portal'), "Authorized author user to access protected endpoint");
 
-    echo "\n------------------------------------------------------\n";
+    echo "\n-------------------------------------------------------------------\n";
     echo " TEST RESULTS: {$passedCount} Passed, {$failedCount} Failed\n";
-    echo "------------------------------------------------------\n";
+    echo "-------------------------------------------------------------------\n";
 
     if ($failedCount > 0) {
         exit(1);
