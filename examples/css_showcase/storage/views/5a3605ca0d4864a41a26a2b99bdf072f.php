@@ -41,9 +41,9 @@
         <h2>🎨 Spartan + Open Props CSS</h2>
         <div class="nav-links">
             <a href="/">Hub</a>
-            <a href="/css/tailwind">Tailwind</a>
-            <a href="/css/openprops">Open Props</a>
-            <a href="/css/vanilla">Vanilla</a>
+            <a href="/tailwind">Tailwind</a>
+            <a href="/openprops">Open Props</a>
+            <a href="/vanilla">Vanilla</a>
         </div>
     </div>
 

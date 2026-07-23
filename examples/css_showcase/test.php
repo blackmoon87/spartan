@@ -63,7 +63,7 @@ assertCondition(
 
 // Test 2: Tailwind CSS Integration Route
 $_SERVER['REQUEST_METHOD'] = 'GET';
-$_SERVER['REQUEST_URI'] = '/css/tailwind';
+$_SERVER['REQUEST_URI'] = '/tailwind';
 $app->router->setRequest(new Request());
 $htmlTailwind = $app->router->resolve();
 assertCondition(
@@ -74,7 +74,7 @@ assertCondition(
 
 // Test 3: Open Props CSS Integration Route
 $_SERVER['REQUEST_METHOD'] = 'GET';
-$_SERVER['REQUEST_URI'] = '/css/openprops';
+$_SERVER['REQUEST_URI'] = '/openprops';
 $app->router->setRequest(new Request());
 $htmlOpenProps = $app->router->resolve();
 assertCondition(
@@ -85,7 +85,7 @@ assertCondition(
 
 // Test 4: Vanilla Glassmorphism Engine Route
 $_SERVER['REQUEST_METHOD'] = 'GET';
-$_SERVER['REQUEST_URI'] = '/css/vanilla';
+$_SERVER['REQUEST_URI'] = '/vanilla';
 $app->router->setRequest(new Request());
 $htmlVanilla = $app->router->resolve();
 assertCondition(

@@ -8,6 +8,6 @@ use App\Core\Application;
 /** @var Application $app */
 
 $app->router->get('/', [CssShowcaseController::class, 'index']);
-$app->router->get('/css/tailwind', [CssShowcaseController::class, 'tailwind']);
-$app->router->get('/css/openprops', [CssShowcaseController::class, 'openprops']);
-$app->router->get('/css/vanilla', [CssShowcaseController::class, 'vanilla']);
+$app->router->get('/tailwind', [CssShowcaseController::class, 'tailwind']);
+$app->router->get('/openprops', [CssShowcaseController::class, 'openprops']);
+$app->router->get('/vanilla', [CssShowcaseController::class, 'vanilla']);

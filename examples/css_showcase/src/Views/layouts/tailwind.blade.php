@@ -16,9 +16,9 @@
             </div>
             <div class="flex space-x-4 text-sm font-medium">
                 <a href="/" class="hover:text-amber-400">Hub</a>
-                <a href="/css/tailwind" class="text-amber-400">Tailwind</a>
-                <a href="/css/openprops" class="hover:text-amber-400">Open Props</a>
-                <a href="/css/vanilla" class="hover:text-amber-400">Vanilla</a>
+                <a href="/tailwind" class="text-amber-400">Tailwind</a>
+                <a href="/openprops" class="hover:text-amber-400">Open Props</a>
+                <a href="/vanilla" class="hover:text-amber-400">Vanilla</a>
             </div>
         </div>
     </nav>
