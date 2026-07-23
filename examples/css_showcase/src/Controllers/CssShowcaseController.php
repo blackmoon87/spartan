@@ -11,20 +11,71 @@ class CssShowcaseController extends Controller
     public function index(): string
     {
         return $this->render('showcase/index', [
-            'title' => 'CSS Frameworks Integration Hub',
+            'title' => 'Spartan CSS Engine Hub — High-End Design Systems',
             'activeEngine' => 'Hub',
+            'stats' => [
+                'rps' => '1,827',
+                'boot' => '1.8 ms',
+                'memory' => '4.5 MB',
+                'tests' => '102/102',
+            ]
         ]);
     }
 
     public function tailwind(): string
     {
         return $this->render('showcase/tailwind', [
-            'title' => 'Tailwind CSS Integration Showcase',
+            'title' => 'Tailwind CSS High-End Component Suite',
             'activeEngine' => 'Tailwind',
-            'components' => [
-                ['name' => 'Card Component', 'type' => 'Utility First', 'status' => 'Active'],
-                ['name' => 'Button Group', 'type' => 'Flex Container', 'status' => 'Ready'],
-                ['name' => 'Grid Layout', 'type' => 'Responsive Grid', 'status' => 'Compiled'],
+            'metrics' => [
+                ['label' => 'Total Revenue', 'value' => '$128,450', 'change' => '+14.2%', 'isUp' => true],
+                ['label' => 'Active Subscribers', 'value' => '3,420', 'change' => '+8.1%', 'isUp' => true],
+                ['label' => 'Server Latency', 'value' => '1.2 ms', 'change' => '-18.5%', 'isUp' => true],
+                ['label' => 'Error Rate', 'value' => '0.001%', 'change' => '-0.02%', 'isUp' => true],
+            ],
+            'projects' => [
+                [
+                    'name' => 'Spartan Core v2.0',
+                    'category' => 'Framework Core',
+                    'status' => 'Production',
+                    'progress' => 94,
+                    'assignees' => ['Alexei Volkov', 'Sarah Chen'],
+                    'budget' => '$45,000',
+                ],
+                [
+                    'name' => 'AI Code Assistant Engine',
+                    'category' => 'Agentic Systems',
+                    'status' => 'In Review',
+                    'progress' => 78,
+                    'assignees' => ['Michael Scott'],
+                    'budget' => '$32,000',
+                ],
+                [
+                    'name' => 'Zero-Dependency ORM Dialects',
+                    'category' => 'Database Engine',
+                    'status' => 'Production',
+                    'progress' => 100,
+                    'assignees' => ['Dev User', 'Alexei Volkov'],
+                    'budget' => '$18,500',
+                ],
+            ],
+            'pricing' => [
+                [
+                    'name' => 'Developer',
+                    'price' => '$0',
+                    'period' => 'forever',
+                    'desc' => 'Pure zero-dependency PHP MVC framework for high performance projects.',
+                    'features' => ['Zero Dependencies', '2 ms Cold Boot', 'Blade View Engine', 'SQLite & MySQL Dialects'],
+                    'popular' => false,
+                ],
+                [
+                    'name' => 'Enterprise Pro',
+                    'price' => '$99',
+                    'period' => '/ month',
+                    'desc' => 'Dedicated background workers, Redis clustering, and 24/7 priority SLAs.',
+                    'features' => ['All Developer Features', 'Redis Cluster Support', 'Async Worker Daemon', 'Priority Security Audits', 'RBAC Attribute Inspection'],
+                    'popular' => true,
+                ],
             ]
         ]);
     }
@@ -32,13 +83,13 @@ class CssShowcaseController extends Controller
     public function openprops(): string
     {
         return $this->render('showcase/openprops', [
-            'title' => 'Open Props CSS Custom Variables Showcase',
+            'title' => 'Open Props Design System & Token Suite',
             'activeEngine' => 'Open Props',
-            'props' => [
-                '--size-1' => '0.25rem',
-                '--size-3' => '1rem',
-                '--gradient-1' => 'linear-gradient(135deg, #4f46e5, #06b6d4)',
-                '--shadow-3' => '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            'tokens' => [
+                'Typography' => ['--font-sans' => 'system-ui', '--font-mono' => 'monospace', '--font-size-5' => '2rem'],
+                'Elevation' => ['--shadow-1' => 'Subtle Drop', '--shadow-3' => 'Medium Elevation', '--shadow-5' => 'Hero Floating'],
+                'Gradients' => ['--gradient-1' => 'Sunset Magenta', '--gradient-3' => 'Ocean Cyan', '--gradient-8' => 'Neon Emerald'],
+                'Radii' => ['--radius-1' => '2px', '--radius-3' => '8px', '--radius-round' => '1e5px'],
             ]
         ]);
     }
@@ -46,12 +97,12 @@ class CssShowcaseController extends Controller
     public function vanilla(): string
     {
         return $this->render('showcase/vanilla', [
-            'title' => 'Vanilla Glassmorphic CSS Engine Showcase',
+            'title' => 'Awwwards / Godly Style Glassmorphic Showcase',
             'activeEngine' => 'Vanilla Glassmorphism',
-            'metrics' => [
-                'Boot Time' => '1.8 ms',
-                'Dependencies' => '0 KB',
-                'CSS Memory' => '12 KB',
+            'highlights' => [
+                ['title' => 'Ultra-Low TTFB', 'badge' => '2 ms', 'desc' => 'Sub-millisecond routing and direct view compilation without autoloader drag.'],
+                ['title' => 'Zero Vulnerability Surface', 'badge' => '0 Deps', 'desc' => 'No vendor package tree means zero third-party supply chain risks.'],
+                ['title' => 'Awwwards-Grade UI', 'badge' => '60 FPS', 'desc' => 'Hardware-accelerated CSS backdrop filters, glowing borders, and fluid grids.'],
             ]
         ]);
     }

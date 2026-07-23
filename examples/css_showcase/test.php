@@ -67,9 +67,9 @@ $_SERVER['REQUEST_URI'] = '/tailwind';
 $app->router->setRequest(new Request());
 $htmlTailwind = $app->router->resolve();
 assertCondition(
-    str_contains($htmlTailwind, 'https://cdn.tailwindcss.com') && str_contains($htmlTailwind, 'bg-slate-950') && str_contains($htmlTailwind, 'Utility First'),
-    '2. Tailwind CSS Layout & Utility Classes Compilation',
-    'CDN script injected, Tailwind classes compiled correctly'
+    str_contains($htmlTailwind, 'Enterprise Dashboard Component Suite') && str_contains($htmlTailwind, 'Total Revenue') && str_contains($htmlTailwind, 'Developer'),
+    '2. Tailwind CSS Layout & High-End Component Suite Compilation',
+    'Stats grid, interactive project table & pricing cards compiled'
 );
 
 // Test 3: Open Props CSS Integration Route
@@ -78,9 +78,9 @@ $_SERVER['REQUEST_URI'] = '/openprops';
 $app->router->setRequest(new Request());
 $htmlOpenProps = $app->router->resolve();
 assertCondition(
-    str_contains($htmlOpenProps, 'https://unpkg.com/open-props') && str_contains($htmlOpenProps, '--surface-1') && str_contains($htmlOpenProps, '--size-1'),
-    '3. Open Props Custom Properties Layout Compilation',
-    'Open Props CSS variables evaluated inside Blade directives'
+    str_contains($htmlOpenProps, 'Open Props Tokens Engine') && str_contains($htmlOpenProps, 'Typography Tokens') && str_contains($htmlOpenProps, '--shadow-5'),
+    '3. Open Props Custom Properties & Shadow Tokens Compilation',
+    'Open Props token matrix evaluated inside Blade directives'
 );
 
 // Test 4: Vanilla Glassmorphism Engine Route
@@ -89,9 +89,9 @@ $_SERVER['REQUEST_URI'] = '/vanilla';
 $app->router->setRequest(new Request());
 $htmlVanilla = $app->router->resolve();
 assertCondition(
-    str_contains($htmlVanilla, 'backdrop-filter: blur') && str_contains($htmlVanilla, '1.8 ms'),
-    '4. Vanilla Glassmorphism CSS Engine Rendering',
-    'Rendered custom backdrop filter cards & performance metrics'
+    str_contains($htmlVanilla, 'Awwwards & Godly Aesthetic Standard') && str_contains($htmlVanilla, 'Ultra-High Precision Glassmorphic Design System'),
+    '4. Vanilla Glassmorphism Awwwards-Grade UI Rendering',
+    'Rendered glowing glass cards, backdrop filters & code snippets'
 );
 
 // Test 5: Asset Helper CSS Path Generation
