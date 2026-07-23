@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+// ─── TaskForge Configuration ──────────────────────────────────────────────────
+// Demonstrates every configurable feature of the Spartan framework.
+
+return [
+    'app' => [
+        'name'  => 'TaskForge',
+        'url'   => 'http://localhost:8087',
+        'debug' => true,
+    ],
+
+    'db' => [
+        'connection' => 'sqlite',
+        'database'   => 'database/taskforge.db',
+    ],
+
+    'auth' => [
+        'model' => 'App\\Models\\User',
+    ],
+
+    'cache' => [
+        'driver' => 'file',
+        'path'   => __DIR__ . '/../storage/cache',
+    ],
+
+    'router' => [
+        'cache_enabled' => false,
+    ],
+];
