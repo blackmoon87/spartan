@@ -131,7 +131,8 @@ php spartan worker --loop
 ├── examples/
 │   ├── shop/                   # Example 1: E-commerce Store
 │   ├── blogger/                # Example 2: Enterprise Publishing Platform
-│   └── taskforge/              # Example 3: 100% Feature Verification App (36/36 tests)
+│   ├── taskforge/              # Example 3: 100% Feature Verification App (36/36 tests)
+│   └── css_showcase/           # Example 4: Multi-CSS Framework Integration (Tailwind, Open Props, Vanilla)
 ├── public/
 │   ├── .htaccess               # Apache URL rewriting
 │   └── index.php               # Front controller entry point
