@@ -213,6 +213,13 @@ Production e-commerce storefront with shopping cart transactions, product listin
 
 ![Shop Home](docs/screenshots/shop_home.png)
 
+### 4. CSS Multi-Support & Interactive Motion Showcase (`examples/css_showcase`)
+High-end UI component suite rendering Tailwind CSS, Open Props, auto-advancing carousel sliders, CSS shimmer keyframe loaders, and responsive aspect-ratio media galleries.
+
+| Interactive Sliders & Keyframe Motion | Tailwind CSS Component Suite |
+|---|---|
+| ![Interactive Motion](docs/screenshots/css_motion_interactive.png) | ![Tailwind Suite](docs/screenshots/css_tailwind_suite.png) |
+
 ---
 
 ## Core Examples
