@@ -125,7 +125,7 @@ class Application
     public function __isset(string $name): bool
     {
         if ($name === 'db') {
-            return $this->db !== null;
+            return $this->dbInstance !== null || !empty($this->config['db']['database']);
         }
         return false;
     }

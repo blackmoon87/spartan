@@ -254,14 +254,26 @@ class QueryBuilder
 
         // COUNT query (respects wheres + joins + groupBy)
         [$whereSQL, $bindings] = $this->buildWhere();
-        $countSql = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table);
+
+        // Build JOIN clauses for count query
+        $joinSQL = '';
         foreach ($this->joins as $join) {
             $onClause = isset($join['raw']) && $join['raw'] !== null
                 ? $join['raw']
                 : "{$join['first']} {$join['operator']} {$join['second']}";
-            $countSql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
+            $joinSQL .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
         }
-        $countSql .= $whereSQL;
+
+        if (!empty($this->groupBys)) {
+            // When GROUP BY is present, COUNT(*) returns per-group counts.
+            // Wrap in a subquery to count the number of groups instead.
+            $groupCols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->groupBys));
+            $innerSql  = "SELECT 1 FROM " . $this->dialect->quoteTable($this->table) . $joinSQL . $whereSQL . " GROUP BY {$groupCols}";
+            $countSql  = "SELECT COUNT(*) as cnt FROM ({$innerSql}) as _grouped";
+        } else {
+            $countSql = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table) . $joinSQL . $whereSQL;
+        }
+
         $total = (int) ($this->execute($countSql, $bindings)->fetch(\PDO::FETCH_ASSOC)['cnt'] ?? 0);
 
         // Apply pagination bounds and fetch data

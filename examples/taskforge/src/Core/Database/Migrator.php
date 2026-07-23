@@ -53,8 +53,16 @@ class Migrator
                 $sql = str_ireplace('INT UNSIGNED AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
                 $sql = str_ireplace('INT AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
                 $sql = str_ireplace('INT AUTO_INCREMENT', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
-                $sql = str_ireplace('ENUM(\'pending\',\'processing\',\'done\',\'failed\')', 'VARCHAR(50)', $sql);
-                $sql = str_ireplace('ENUM(\'retry\',\'stop\')', 'VARCHAR(50)', $sql);
+                // Universal ENUM → VARCHAR(50) (handles ANY enum values, not just specific ones)
+                $sql = preg_replace('/ENUM\s*\([^)]+\)/i', 'VARCHAR(50)', $sql);
+                // TINYINT UNSIGNED → INTEGER (must come before generic UNSIGNED removal)
+                $sql = preg_replace('/TINYINT\s+UNSIGNED/i', 'INTEGER', $sql);
+                // JSON type → TEXT (SQLite has no native JSON column type)
+                $sql = preg_replace('/\bJSON\b/i', 'TEXT', $sql);
+                // Strip remaining UNSIGNED modifiers
+                $sql = preg_replace('/\bUNSIGNED\b/i', '', $sql);
+                // Strip ON UPDATE CURRENT_TIMESTAMP (not supported in SQLite)
+                $sql = preg_replace('/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i', '', $sql);
                 $sql = preg_replace('/ENGINE\s*=\s*\w+/i', '', $sql);
                 $sql = preg_replace('/DEFAULT\s+CHARSET\s*=\s*\w+/i', '', $sql);
                 $sql = preg_replace('/COLLATE\s*=\s*\w+/i', '', $sql);

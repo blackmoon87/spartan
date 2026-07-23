@@ -142,7 +142,8 @@ class View implements ViewInterface
             throw new \InvalidArgumentException("Blade template not found [{$view}]");
         }
 
-        $cacheDir = dirname(dirname(__DIR__)) . '/storage/views';
+        $viewsConfig = isset(Application::$app) ? (Application::$app->config['views'] ?? []) : [];
+        $cacheDir = $viewsConfig['cache_path'] ?? (dirname(dirname(__DIR__)) . '/storage/views');
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0755, true);
         }

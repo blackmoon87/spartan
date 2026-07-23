@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════════╗
- * ║   SPARTAN FRAMEWORK — TASKFORGE COMPREHENSIVE FEATURE TEST SUITE            ║
- * ║   Tests every single core component: 36 automated steps                     ║
+ * ║   SPARTAN FRAMEWORK — TASKFORGE COMPREHENSIVE FEATURE TEST SUITE              ║
+ * ║   Tests every single core component: 36 automated steps                       ║
  * ╚═══════════════════════════════════════════════════════════════════════════════╝
  */
 

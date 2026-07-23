@@ -56,7 +56,16 @@ class FileCacheDriver implements CacheDriverInterface
 
     public function has(string $key): bool
     {
-        return $this->get($key) !== null;
+        $file = $this->filePath($key);
+        if (!file_exists($file)) {
+            return false;
+        }
+        $payload = unserialize((string) file_get_contents($file));
+        if ($payload['expires'] !== 0 && time() > $payload['expires']) {
+            unlink($file);
+            return false;
+        }
+        return true;
     }
 
     public function forget(string $key): void
