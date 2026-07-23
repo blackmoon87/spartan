@@ -123,32 +123,51 @@ php spartan worker --loop
 ## Structure
 
 ```
+├── BENCHMARKS.md               # Full competitive performance benchmark report
 ├── config/
 │   └── config.php              # .env loader → config array
+├── database/
+│   └── migrations/             # Dialect-aware SQL migrations
+├── examples/
+│   ├── shop/                   # Example 1: E-commerce Store
+│   ├── blogger/                # Example 2: Enterprise Publishing Platform
+│   └── taskforge/              # Example 3: 100% Feature Verification App (36/36 tests)
 ├── public/
-│   ├── .htaccess               # URL rewriting
-│   └── index.php               # Front controller
+│   ├── .htaccess               # Apache URL rewriting
+│   └── index.php               # Front controller entry point
 ├── routes/
-│   ├── web.php                 # Public routes
+│   ├── web.php                 # Public web routes
 │   ├── admin.php               # Protected routes
 │   └── api.php                 # JSON API routes
 ├── src/
-│   ├── Core/                   # Framework kernel (do not modify)
-│   │   ├── Application.php
-│   │   ├── Router.php
-│   │   ├── Request.php
-│   │   ├── Response.php
-│   │   ├── Controller.php
-│   │   ├── Model.php
-│   │   ├── QueryBuilder.php
-│   │   ├── RelationQuery.php
-│   │   ├── JobQueue.php
-│   │   ├── EventDispatcher.php
-│   │   ├── Container.php
-│   │   ├── Cache.php
-│   │   ├── Session.php
-│   │   ├── Validator.php
-│   │   └── View.php
+│   ├── Core/                   # Spartan Framework Kernel (37 files, Zero dependencies)
+│   │   ├── Application.php     # App orchestrator & singleton
+│   │   ├── Auth.php            # Session-backed Auth system
+│   │   ├── Attributes/         # PHP 8.1 Attributes (#[RequireRole], #[RequirePermission])
+│   │   ├── Cache.php           # Cache facade (File & Redis)
+│   │   ├── CacheDrivers/       # FileCacheDriver, RedisCacheDriver
+│   │   ├── Container.php       # DI Container with reflection parameter caching
+│   │   ├── Controller.php      # Base Controller
+│   │   ├── Database.php        # PDO singleton connection pool
+│   │   ├── Database/           # Migrator, SqliteDialect, MysqlDialect
+│   │   ├── EventDispatcher.php # Sync & Async DB job queue event system
+│   │   ├── ExceptionHandler.php# Error & Exception rendering
+│   │   ├── FormRequest.php     # Request base with auto-validation
+│   │   ├── Gate.php            # Abilities, Policies & GateEvaluator
+│   │   ├── JobQueue.php        # Async job runner with backoff
+│   │   ├── Logger.php          # PSR-3 Daily rotated logger
+│   │   ├── Middleware.php      # Middleware interface & base
+│   │   ├── Model.php           # Active Record ORM & relationships
+│   │   ├── QueryBuilder.php    # Dialect-aware Fluent QueryBuilder
+│   │   ├── RelationQuery.php   # Relationship executor (hasMany, hasOne, belongsTo)
+│   │   ├── Request.php         # HTTP Request & method spoofing
+│   │   ├── Response.php        # HTTP Response & security headers
+│   │   ├── Router.php          # Dynamic router & attribute inspector
+│   │   ├── Session.php         # Hardened Session manager
+│   │   ├── Traits/             # HasAuthorization trait
+│   │   ├── Validator.php       # 16 validation rules (unique, regex, etc.)
+│   │   ├── View.php            # Blade compiler (20+ directives) & layouts
+│   │   └── helpers.php         # Global functions (url, asset, auth, config)
 │   ├── Controllers/
 │   ├── Models/
 │   ├── Services/
@@ -158,9 +177,12 @@ php spartan worker --loop
 │   └── Views/
 │       └── layouts/
 ├── storage/
-│   ├── cache/
-│   └── jobs.sql                # Async queue table schema
-├── worker.php                  # CLI queue worker
+│   ├── cache/                  # Fast file cache store
+│   ├── logs/                   # PSR-3 daily log files
+│   └── views/                  # Compiled Blade PHP templates
+├── tests/
+│   ├── run_tests.php           # Core Kernel test suite (22 tests)
+│   └── stress_test.php         # High-volume stress & micro-benchmark suite
 ├── .env
 ├── .env.example
 ├── .cursorrules                # AI IDE architecture rules
