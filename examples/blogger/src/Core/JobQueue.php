@@ -31,6 +31,12 @@ class JobQueue
     /** Backoff delays in seconds, indexed by attempt number (0-based after first failure) */
     private const BACKOFF = [0, 60, 300];
 
+    /**
+     * Seconds after which a job left in 'processing' is assumed abandoned
+     * (worker crashed / was killed mid-job) and returned to the queue.
+     */
+    private const STALE_AFTER = 600;
+
     public function __construct(PDO $db)
     {
         $this->db = $db;
@@ -81,6 +87,8 @@ class JobQueue
      */
     public function processPending(): int
     {
+        $this->reclaimStale();
+
         $jobs = $this->fetchPending();
 
         foreach ($jobs as $job) {
@@ -93,6 +101,34 @@ class JobQueue
     // ─────────────────────────────────────────────────────────────────────────
     // Internal
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Return jobs abandoned by a dead worker to the pending queue.
+     *
+     * Without this, a worker killed mid-job leaves its rows stuck in
+     * 'processing' forever — they are never retried and never reported.
+     * A job's run_at is stamped when it is claimed, so its age is the
+     * time since the claim.
+     */
+    public function reclaimStale(int $staleAfter = self::STALE_AFTER): int
+    {
+        $cutoff = date('Y-m-d H:i:s', time() - max(1, $staleAfter));
+
+        try {
+            $stmt = $this->db->prepare(
+                "UPDATE jobs
+                    SET status = 'pending',
+                        error  = 'Reclaimed: worker did not finish the job.'
+                  WHERE status = 'processing'
+                    AND run_at <= ?"
+            );
+            $stmt->execute([$cutoff]);
+            return $stmt->rowCount();
+        } catch (Throwable $e) {
+            error_log('[JobQueue] reclaimStale failed: ' . $e->getMessage());
+            return 0;
+        }
+    }
 
     /**
      * Fetch pending jobs ready to run, and atomically mark them as 'processing'
@@ -121,12 +157,18 @@ class JobQueue
             if (!empty($jobs)) {
                 $ids          = array_column($jobs, 'id');
                 $placeholders = implode(',', array_fill(0, count($ids), '?'));
-                $this->db->prepare("UPDATE jobs SET status = 'processing' WHERE id IN ({$placeholders})")->execute($ids);
+                // Stamping run_at at claim time gives reclaimStale() an age to
+                // measure against.
+                $this->db->prepare(
+                    "UPDATE jobs SET status = 'processing', run_at = ? WHERE id IN ({$placeholders})"
+                )->execute([$now, ...$ids]);
             }
 
             $this->db->commit();
         } catch (Throwable $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             error_log('[JobQueue] fetchPending failed: ' . $e->getMessage());
             return [];
         }

@@ -73,7 +73,8 @@ abstract class Model
         }
         
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        QueryBuilder::bindTyped($stmt, $params);
+        $stmt->execute();
         return $stmt;
     }
 
@@ -226,13 +227,27 @@ abstract class Model
      */
     public function transaction(callable $callback): mixed
     {
-        $this->beginTransaction();
+        if ($this->db === null) {
+            throw new RuntimeException('Database connection is not configured or failed to initialize.');
+        }
+
+        // Nested calls join the outer transaction instead of opening a second
+        // one (PDO would throw) — and must not commit or roll it back.
+        $isOuter = !$this->db->inTransaction();
+        if ($isOuter) {
+            $this->beginTransaction();
+        }
+
         try {
             $result = $callback($this);
-            $this->commit();
+            if ($isOuter) {
+                $this->commit();
+            }
             return $result;
         } catch (\Throwable $e) {
-            $this->rollBack();
+            if ($isOuter && $this->db->inTransaction()) {
+                $this->rollBack();
+            }
             throw $e;
         }
     }

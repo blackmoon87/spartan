@@ -605,14 +605,21 @@ php examples/blogger/test.php
 
 | Threat | Mitigation |
 |---|---|
-| SQL Injection | QueryBuilder — fully parameterized, zero raw SQL |
+| SQL Injection | QueryBuilder — values bound as parameters; operators and column names checked against a whitelist |
 | XSS | `$this->escape()` in all views — `ENT_QUOTES UTF-8` |
-| CSRF | Token validated on all POST (form / AJAX header / JSON body) |
+| CSRF | Token validated on every state-changing verb — POST, PUT, PATCH, DELETE (form / AJAX header / JSON body) |
 | Session Fixation | `Session::regenerate()` after every login |
 | Path Traversal | Regex + `realpath()` double-guard in View |
 | Open Redirect | `Response::redirect()` blocks external domains |
 | Clickjacking | `SecurityHeadersMiddleware` — X-Frame-Options: SAMEORIGIN |
 | MIME Sniffing | X-Content-Type-Options: nosniff |
+| IP Spoofing | `X-Forwarded-For` honoured only for peers listed in `TRUSTED_PROXIES` |
+| Rate Limit Evasion | Counters incremented atomically (file lock / Redis `INCR`) |
+| Cross-Request Identity Leaks | Worker mode clears the cached user + session between requests |
+
+> **Behind a load balancer?** Set `TRUSTED_PROXIES` in `.env` (IPs, CIDRs, or `*`).
+> Left empty — the default — forwarded headers are ignored and `REMOTE_ADDR` wins,
+> so nobody can forge an IP to dodge the rate limiter.
 
 ---
 

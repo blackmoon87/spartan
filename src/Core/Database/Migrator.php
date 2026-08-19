@@ -49,10 +49,24 @@ class Migrator
             // Auto-translate dialect based on active driver
             $driver = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
             if ($driver === 'sqlite') {
-                // MySQL -> SQLite translation
-                $sql = str_ireplace('INT UNSIGNED AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
-                $sql = str_ireplace('INT AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
-                $sql = str_ireplace('INT AUTO_INCREMENT', 'INTEGER PRIMARY KEY AUTOINCREMENT', $sql);
+                // MySQL -> SQLite translation.
+                // Whitespace-tolerant: schema files align columns with runs of
+                // spaces, and the old literal str_ireplace() calls silently
+                // missed 'INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY',
+                // leaving a non-rowid 'INT PRIMARY KEY' whose inserts produce
+                // NULL ids.
+                $sql = preg_replace(
+                    '/\b(?:BIG|SMALL|MEDIUM|TINY)?INT(?:EGER)?\b(?:\s+UNSIGNED)?\s+AUTO_INCREMENT\s+PRIMARY\s+KEY/i',
+                    'INTEGER PRIMARY KEY AUTOINCREMENT',
+                    $sql
+                );
+                $sql = preg_replace(
+                    '/\bPRIMARY\s+KEY\s+(?:BIG|SMALL|MEDIUM|TINY)?INT(?:EGER)?\b(?:\s+UNSIGNED)?\s+AUTO_INCREMENT/i',
+                    'INTEGER PRIMARY KEY AUTOINCREMENT',
+                    $sql
+                );
+                // Any AUTO_INCREMENT left over has no SQLite equivalent.
+                $sql = preg_replace('/\s*\bAUTO_INCREMENT\b/i', '', $sql);
                 // Universal ENUM → VARCHAR(50) (handles ANY enum values, not just specific ones)
                 $sql = preg_replace('/ENUM\s*\([^)]+\)/i', 'VARCHAR(50)', $sql);
                 // TINYINT UNSIGNED → INTEGER (must come before generic UNSIGNED removal)

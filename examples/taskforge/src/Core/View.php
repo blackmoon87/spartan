@@ -19,6 +19,17 @@ class View implements ViewInterface
     }
 
     /**
+     * Reset transient per-render state (worker mode).
+     * Shared variables and the views path are configuration and are kept.
+     */
+    public function resetState(): void
+    {
+        $this->sections       = [];
+        $this->activeSection  = null;
+        $this->extendedLayout = null;
+    }
+
+    /**
      * Share a variable globally with all views.
      */
     public function share(string $key, mixed $value): void
@@ -148,9 +159,10 @@ class View implements ViewInterface
             mkdir($cacheDir, 0755, true);
         }
 
-        $compiledPath = $cacheDir . '/' . md5($view) . '.php';
+        // Key on the FULL source path: two apps (or two view roots) sharing a
+        // cache directory previously collided on md5('home').
+        $compiledPath = $cacheDir . '/' . md5($sourcePath) . '.php';
 
-        $viewsConfig = isset(Application::$app) ? (Application::$app->config['views'] ?? []) : [];
         $cacheEnabled = $viewsConfig['cache_enabled'] ?? false;
 
         if ($cacheEnabled && file_exists($compiledPath)) {
@@ -162,7 +174,18 @@ class View implements ViewInterface
         if (!file_exists($compiledPath) || $debugMode || filemtime($sourcePath) > filemtime($compiledPath)) {
             $content = file_get_contents($sourcePath);
             $compiledContent = $this->compileString($content);
-            file_put_contents($compiledPath, $compiledContent);
+
+            // Compile atomically so a concurrent request can never `require`
+            // a partially written template.
+            $tmp = $compiledPath . '.' . getmypid() . '.tmp';
+            if (file_put_contents($tmp, $compiledContent, LOCK_EX) !== false && rename($tmp, $compiledPath)) {
+                if (function_exists('opcache_invalidate')) {
+                    @opcache_invalidate($compiledPath, true);
+                }
+            } else {
+                @unlink($tmp);
+                throw new \RuntimeException("Unable to write compiled view cache for [{$view}].");
+            }
         }
 
         return $compiledPath;

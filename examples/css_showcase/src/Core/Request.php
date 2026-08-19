@@ -9,6 +9,40 @@ class Request
     protected ?array $jsonParams = null;
 
     /**
+     * HTTP methods that mutate state and therefore require CSRF verification.
+     */
+    private const STATE_CHANGING = ['POST', 'PUT', 'PATCH', 'DELETE'];
+
+    /**
+     * Proxy IPs / CIDR ranges allowed to override the client IP via
+     * X-Forwarded-For or Client-IP headers. Empty (the default) means those
+     * headers are IGNORED — REMOTE_ADDR is authoritative.
+     *
+     * Configure with TRUSTED_PROXIES in .env (comma separated), e.g.
+     *   TRUSTED_PROXIES=10.0.0.0/8,172.16.0.1
+     *   TRUSTED_PROXIES=*        # trust every upstream (only behind a private LB)
+     *
+     * @var list<string>
+     */
+    protected static array $trustedProxies = [];
+
+    /**
+     * Register the trusted proxy list. Called by Application on boot.
+     */
+    public static function setTrustedProxies(array $proxies): void
+    {
+        self::$trustedProxies = array_values(array_filter(array_map('trim', $proxies), fn($p) => $p !== ''));
+    }
+
+    /**
+     * Reset per-request memoised state (worker mode: FrankenPHP / RoadRunner).
+     */
+    public function resetState(): void
+    {
+        $this->jsonParams = null;
+    }
+
+    /**
      * Get request URI path, stripping query parameters and base subdirectory path.
      */
     public function getPath(): string
@@ -211,7 +245,9 @@ class Request
      */
     public function validateCsrf(): bool
     {
-        if (!$this->isPost()) {
+        // Covers real POST plus spoofed and native PUT / PATCH / DELETE.
+        if (!in_array($this->getMethod(), self::STATE_CHANGING, true)
+            && !in_array($this->getRealMethod(), self::STATE_CHANGING, true)) {
             return true;
         }
 
@@ -228,16 +264,12 @@ class Request
             return hash_equals((string) $sessionToken, (string) $_POST['_csrf']);
         }
 
-        // 3. Check JSON body (Content-Type: application/json)
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (str_contains($contentType, 'application/json')) {
-            $raw  = file_get_contents('php://input');
-            $json = json_decode($raw ?: '', true);
-            $jsonToken = $json['_csrf'] ?? null;
-            if ($jsonToken !== null) {
-                $sessionToken = Application::$app->session->get('_csrf_token');
-                return hash_equals((string) $sessionToken, (string) $jsonToken);
-            }
+        // 3. Check JSON body (Content-Type: application/json).
+        // Reuses the memoised parse — php://input is only read once per request.
+        $jsonToken = $this->getJsonParams()['_csrf'] ?? null;
+        if ($jsonToken !== null) {
+            $sessionToken = Application::$app->session->get('_csrf_token');
+            return hash_equals((string) $sessionToken, (string) $jsonToken);
         }
 
         // No token found by any method
@@ -259,10 +291,67 @@ class Request
      */
     public function getIp(): string
     {
-        return $_SERVER['HTTP_CLIENT_IP'] 
-            ?? $_SERVER['HTTP_X_FORWARDED_FOR'] 
-            ?? $_SERVER['REMOTE_ADDR'] 
-            ?? '127.0.0.1';
+        $remote = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+
+        // Forwarded headers are client-controlled: honour them ONLY when the
+        // immediate peer is a configured trusted proxy. Without this check any
+        // caller could forge an IP and bypass IP-based rate limiting.
+        if (self::$trustedProxies === [] || !self::isTrustedProxy($remote)) {
+            return $remote;
+        }
+
+        $forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? '';
+        foreach (explode(',', $forwarded) as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP) !== false) {
+                return $candidate; // left-most entry = original client
+            }
+        }
+
+        return $remote;
+    }
+
+    /**
+     * Check an IP against the trusted proxy list (exact match, CIDR, or '*').
+     */
+    private static function isTrustedProxy(string $ip): bool
+    {
+        foreach (self::$trustedProxies as $proxy) {
+            if ($proxy === '*' || $proxy === $ip) {
+                return true;
+            }
+            if (str_contains($proxy, '/') && self::ipInCidr($ip, $proxy)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * IPv4 / IPv6 CIDR membership test.
+     */
+    private static function ipInCidr(string $ip, string $cidr): bool
+    {
+        [$subnet, $maskBits] = explode('/', $cidr, 2);
+        $ipBin     = @inet_pton($ip);
+        $subnetBin = @inet_pton($subnet);
+        if ($ipBin === false || $subnetBin === false || strlen($ipBin) !== strlen($subnetBin)) {
+            return false;
+        }
+
+        $maskBits = (int) $maskBits;
+        $bytes    = intdiv($maskBits, 8);
+        $rest     = $maskBits % 8;
+
+        if ($bytes > 0 && strncmp($ipBin, $subnetBin, $bytes) !== 0) {
+            return false;
+        }
+        if ($rest === 0) {
+            return true;
+        }
+
+        $mask = chr((0xFF << (8 - $rest)) & 0xFF);
+        return (($ipBin[$bytes] & $mask) === ($subnetBin[$bytes] & $mask));
     }
 
     /**

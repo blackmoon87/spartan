@@ -44,6 +44,14 @@ class Auth implements AuthInterface
     }
 
     /**
+     * Forget the cached user instance (worker mode / after logout).
+     */
+    public function forgetUser(): void
+    {
+        $this->user = null;
+    }
+
+    /**
      * Get the authenticated user's ID.
      */
     public function id(): int|string|null

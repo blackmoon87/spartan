@@ -39,6 +39,9 @@ class Application
 
         self::$app = $this;
         $this->config    = $config;
+
+        // Client-controlled forwarding headers are only honoured for these peers.
+        Request::setTrustedProxies($config['app']['trusted_proxies'] ?? []);
         $this->container = new Container();
         $this->logger    = new Logger();
         
@@ -99,10 +102,25 @@ class Application
     {
         if ($request !== null) {
             $this->request = $request;
-            $this->router->setRequest($request);
+        } else {
+            // Superglobals have been repopulated by the worker runtime: rebuild
+            // the Request so memoised state (JSON body, path) is not reused.
+            $this->request = new Request();
         }
+        $this->router->setRequest($this->request);
+
         $this->response = new Response();
         $this->router->setResponse($this->response);
+
+        // Re-open the session for THIS request (it was closed after the last one).
+        if (method_exists($this->session, 'start')) {
+            $this->session->start($this->request);
+        }
+
+        // A fresh CSRF token for brand-new sessions, mirroring boot behaviour.
+        if (!$this->session->get('_csrf_token')) {
+            $this->session->set('_csrf_token', bin2hex(random_bytes(32)));
+        }
 
         $this->run();
 
@@ -111,13 +129,35 @@ class Application
     }
 
     /**
-     * Reset per-request state to prevent memory leak in worker mode.
+     * Reset per-request state to prevent state bleeding between requests
+     * (and memory growth) in worker mode.
+     *
+     * The identity cache is the critical one: 'auth_user' was previously left
+     * in the container, so the NEXT request — including an anonymous one —
+     * resolved the PREVIOUS request's user through Gate::resolveUser().
      */
     public function resetPerRequestState(): void
     {
-        // Clear container non-singleton transient instances if any
         if (isset($this->session)) {
             $this->session->removeFlashMessages();
+            if (method_exists($this->session, 'close')) {
+                $this->session->close();
+            }
+        }
+
+        // Drop the resolved-identity cache — never share it across requests.
+        $this->container->forget('auth_user');
+
+        if (isset($this->auth) && method_exists($this->auth, 'forgetUser')) {
+            $this->auth->forgetUser();
+        }
+
+        if (isset($this->view) && method_exists($this->view, 'resetState')) {
+            $this->view->resetState();
+        }
+
+        if (method_exists($this->request, 'resetState')) {
+            $this->request->resetState();
         }
     }
 

@@ -268,6 +268,106 @@ try {
     Cache::put('kernel_cache_key', 'cached_data', 60);
     assertKernel("22. Cache Layer (File Driver)", Cache::get('kernel_cache_key') === 'cached_data', "Stored and retrieved value from FileCacheDriver");
 
+
+    // ─── Regression tests for hardening fixes ────────────────────────────────
+
+    // 23. SQL operator whitelist
+    $operatorRejected = false;
+    try {
+        (new \App\Core\QueryBuilder($app->db, 'test_books'))->where('id', 1, '= 1 OR 1=1 --');
+    } catch (\Throwable $e) {
+        $operatorRejected = true;
+    }
+    $operatorAccepted = count((new \App\Core\QueryBuilder($app->db, 'test_books'))->where('title', '%Pride%', 'LIKE')->get()) === 1;
+    assertKernel("23. QueryBuilder Operator Whitelist", $operatorRejected && $operatorAccepted, "Rejected injected operator, still accepts LIKE");
+
+    // 24. Column expression whitelist
+    $columnRejected = false;
+    try {
+        (new \App\Core\QueryBuilder($app->db, 'test_books'))->select('id) FROM test_authors WHERE 1=1 --')->get();
+    } catch (\Throwable $e) {
+        $columnRejected = true;
+    }
+    $bookTotal   = count((new \App\Core\QueryBuilder($app->db, 'test_books'))->get());
+    $aggregateOk = (new \App\Core\QueryBuilder($app->db, 'test_books'))
+        ->select('COUNT(id) as total')->first()['total'] ?? null;
+    assertKernel("24. QueryBuilder Identifier Whitelist", $columnRejected && (int) $aggregateOk === $bookTotal, "Blocked injected column, kept COUNT(id) as total working");
+
+    // 25. count() honours joins and groupBy
+    $joinedCount = (new \App\Core\QueryBuilder($app->db, 'test_books'))
+        ->join('test_authors', 'test_authors.id', 'test_books.author_id')
+        ->where('test_authors.id', 1)
+        ->count();
+    $groupedCount = (new \App\Core\QueryBuilder($app->db, 'test_books'))->groupBy('author_id')->count();
+    $expectedJoined = count((new \App\Core\QueryBuilder($app->db, 'test_books'))->where('author_id', 1)->get());
+    $expectedGroups = count((new \App\Core\QueryBuilder($app->db, 'test_books'))->select('author_id')->groupBy('author_id')->get());
+    assertKernel("25. QueryBuilder count() With Joins & Groups", $joinedCount === $expectedJoined && $groupedCount === $expectedGroups, "Counted {$joinedCount} joined rows (expected {$expectedJoined}) and {$groupedCount} group(s)");
+
+    // 26. Client IP spoofing is ignored unless the peer is a trusted proxy
+    $_SERVER['REMOTE_ADDR']          = '203.0.113.9';
+    $_SERVER['HTTP_X_FORWARDED_FOR'] = '1.2.3.4';
+    Request::setTrustedProxies([]);
+    $untrustedIp = (new Request())->getIp();
+    Request::setTrustedProxies(['203.0.113.0/24']);
+    $trustedIp = (new Request())->getIp();
+    Request::setTrustedProxies([]);
+    unset($_SERVER['HTTP_X_FORWARDED_FOR']);
+    assertKernel("26. Trusted Proxy Client IP Resolution", $untrustedIp === '203.0.113.9' && $trustedIp === '1.2.3.4', "Ignored forged X-Forwarded-For, honoured it behind a trusted proxy");
+
+    // 27. CSRF is enforced on native PUT / DELETE, not only POST
+    $app->session->set('_csrf_token', 'valid-token-value');
+    $_SERVER['REQUEST_METHOD'] = 'DELETE';
+    unset($_SERVER['HTTP_X_CSRF_TOKEN'], $_POST['_csrf']);
+    $deleteBlocked = (new Request())->validateCsrf() === false;
+    $_SERVER['HTTP_X_CSRF_TOKEN'] = 'valid-token-value';
+    $deleteAllowed = (new Request())->validateCsrf() === true;
+    unset($_SERVER['HTTP_X_CSRF_TOKEN']);
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    assertKernel("27. CSRF Covers All State-Changing Verbs", $deleteBlocked && $deleteAllowed, "Rejected token-less DELETE, accepted a valid one");
+
+    // 28. Worker mode must not leak the resolved user between requests
+    $app->container->instance('auth_user', (object) ['id' => 99]);
+    $app->resetPerRequestState();
+    assertKernel("28. Worker Mode Identity Isolation", $app->container->has('auth_user') === false && Gate::resolveUser() === null, "Cleared cached auth_user after the request");
+
+    // 29. Rate limiter counter is atomic and window-bounded
+    Cache::forget('kernel_rate_key');
+    $hitsSeen = [];
+    for ($i = 0; $i < 3; $i++) {
+        [$hits, $resetAt] = Cache::increment('kernel_rate_key', 60);
+        $hitsSeen[] = $hits;
+    }
+    assertKernel("29. Atomic Rate Limit Counter", $hitsSeen === [1, 2, 3] && $resetAt > time(), "Counted 3 sequential hits without loss");
+
+    // 30. Corrupt cache payloads degrade to a miss instead of a warning
+    $corruptFile = ($config['cache']['path'] ?? dirname(__DIR__) . '/storage/cache') . '/' . md5('kernel_corrupt') . '.cache';
+    @file_put_contents($corruptFile, 'not-serialized-data');
+    assertKernel("30. Corrupt Cache Payload Tolerance", Cache::get('kernel_corrupt', 'fallback') === 'fallback' && Cache::has('kernel_corrupt') === false, "Treated unreadable cache file as a miss");
+
+    // 31. Abandoned jobs are returned to the queue
+    $app->db->prepare(
+        "INSERT INTO jobs (event, listener, payload, status, run_at) VALUES (?, ?, ?, 'processing', ?)"
+    )->execute(['kernel.stale', KernelAsyncListener::class, '{}', date('Y-m-d H:i:s', time() - 3600)]);
+    $reclaimed = (new JobQueue($app->db))->reclaimStale(600);
+    assertKernel("31. Stale Job Reclamation", $reclaimed >= 1, "Reclaimed {$reclaimed} job(s) abandoned by a dead worker");
+
+    // 32. Global middleware runs even when no route matches (404)
+    class KernelProbeMiddleware extends \App\Core\Middleware {
+        public static bool $ran = false;
+        public function execute(Request $request, Response $response): void { self::$ran = true; }
+    }
+    $probeRouter = new Router(new Request(), new Response());
+    $probeRouter->setGlobalMiddlewares([KernelProbeMiddleware::class]);
+    $_SERVER['REQUEST_URI']    = '/definitely/not/a/route';
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $probeRouter->resolve();
+    assertKernel("32. Global Middleware On Unmatched Routes", KernelProbeMiddleware::$ran === true, "Security middleware still applies to 404 traffic");
+
+    // 33. Nested transactions join the outer one instead of throwing
+    $author = new TestAuthorModel();
+    $nested = $author->transaction(fn($m) => $m->transaction(fn() => 'nested-ok'));
+    assertKernel("33. Nested Transaction Safety", $nested === 'nested-ok' && $app->db->inTransaction() === false, "Inner transaction joined the outer one and committed once");
+
     echo "\n------------------------------------------------------\n";
     echo " KERNEL TEST RESULTS: {$passedCount} Passed, {$failedCount} Failed\n";
     echo "------------------------------------------------------\n";

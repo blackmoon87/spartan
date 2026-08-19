@@ -14,6 +14,15 @@ class Router
     protected array $middlewareAliases = [];
     protected array $globalMiddlewares = [];
 
+    /** Memoised {param} -> regex compilations, keyed by route path. */
+    protected array $patternCache = [];
+
+    /** Memoised attribute scan results, keyed by "Class::method". */
+    protected static array $authAttributeCache = [];
+
+    /** Memoised named-argument compatibility per callback + placeholder set. */
+    protected static array $namedArgCache = [];
+
     public function __construct(Request $request, Response $response)
     {
         $this->request = $request;
@@ -141,21 +150,35 @@ class Router
         $method = $this->request->getMethod();
 
         $routeData = $this->routes[$method][$path] ?? false;
-        $params = [];
+        $params    = [];
+        // Only dynamic routes carry params, so only they need a cache key.
+        $routeKey  = '';
 
-        // If direct match not found, try dynamic pattern matching
+        // If direct match not found, try dynamic pattern matching.
+        // Static routes are skipped — the exact-match lookup above already
+        // ruled them out, so only routes carrying {placeholders} are scanned.
         if ($routeData === false) {
             foreach ($this->routes[$method] ?? [] as $routePath => $data) {
-                // Replace dynamic placeholders {param} with named capturing groups
-                $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $routePath);
-                $pattern = '#^' . $pattern . '$#';
+                if (!str_contains($routePath, '{')) {
+                    continue;
+                }
+
+                $pattern = $this->patternCache[$routePath]
+                    ??= '#^' . preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $routePath) . '$#';
 
                 if (preg_match($pattern, $path, $matches)) {
-                    $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+                    $params    = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
                     $routeData = $data;
+                    $routeKey  = $method . ' ' . $routePath;
                     break;
                 }
             }
+        }
+
+        // Global middlewares run on EVERY request — including unmatched ones,
+        // so security headers and rate limits still apply to 404 traffic.
+        if ($this->runMiddlewares($this->globalMiddlewares)) {
+            return $this->response;
         }
 
         if ($routeData === false) {
@@ -163,31 +186,59 @@ class Router
             return Application::$app->view->render('error_404', ['message' => 'The page you requested was not found.']);
         }
 
-        // Execute Middlewares (prepend global middlewares)
-        $allMiddlewares = array_merge($this->globalMiddlewares, $routeData['middlewares']);
-        $resolvedMiddlewares = $this->resolveMiddlewares($allMiddlewares);
-        foreach ($resolvedMiddlewares as $middlewareInfo) {
-            $middlewareClass = $middlewareInfo['class'];
-            $args = $middlewareInfo['args'];
-
-            /** @var Middleware $middleware */
-            $middleware = new $middlewareClass(...$args);
-            $middleware->execute($this->request, $this->response);
-
-            // Abort resolution if response is marked to terminate (redirect, content set, or error status code)
-            if ($this->response->getRedirectUrl() !== null || $this->response->getContent() !== null || $this->response->getStatusCode() >= 400) {
-                return $this->response;
-            }
+        // Execute route middlewares
+        if ($this->runMiddlewares($routeData['middlewares'])) {
+            return $this->response;
         }
 
         // Execute Callback
-        return $this->executeCallback($routeData['callback'], $params);
+        return $this->executeCallback($routeData['callback'], $params, $routeKey);
+    }
+
+    /**
+     * Run a middleware stack.
+     * Returns true when the chain terminated the request (redirect, content,
+     * or an error status), meaning the route callback must NOT run.
+     */
+    protected function runMiddlewares(array $middlewares): bool
+    {
+        if ($middlewares === []) {
+            return false;
+        }
+
+        foreach ($this->resolveMiddlewares($middlewares) as $middlewareInfo) {
+            $middlewareClass = $middlewareInfo['class'];
+            $args            = $middlewareInfo['args'];
+
+            if (!class_exists($middlewareClass)) {
+                throw new \InvalidArgumentException("Middleware [{$middlewareClass}] does not exist.");
+            }
+
+            // Argument-less middlewares go through the container so they can
+            // declare constructor dependencies; parameterised ones are built
+            // directly (no reflection cost on the hot path).
+            $middleware = $args === [] && Application::$app->container->has($middlewareClass)
+                ? Application::$app->container->make($middlewareClass)
+                : new $middlewareClass(...$args);
+
+            $middleware->execute($this->request, $this->response);
+
+            if ($this->response->getRedirectUrl() !== null
+                || $this->response->getContent() !== null
+                || $this->response->getStatusCode() >= 400) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
      * Helper to resolve middleware groups and class names to a flat array.
+     *
+     * @param list<string> $seenGroups Guards against self-referencing groups.
      */
-    protected function resolveMiddlewares(array $middlewares): array
+    protected function resolveMiddlewares(array $middlewares, array $seenGroups = []): array
     {
         $resolved = [];
         foreach ($middlewares as $middleware) {
@@ -204,7 +255,15 @@ class Router
                 }, explode(',', $argsString)) : [];
 
                 if (isset($this->middlewareGroups[$name])) {
-                    $resolved = array_merge($resolved, $this->resolveMiddlewares($this->middlewareGroups[$name]));
+                    if (in_array($name, $seenGroups, true)) {
+                        throw new \LogicException(
+                            "Circular middleware group reference detected: '{$name}' includes itself."
+                        );
+                    }
+                    $resolved = array_merge(
+                        $resolved,
+                        $this->resolveMiddlewares($this->middlewareGroups[$name], [...$seenGroups, $name])
+                    );
                 } else {
                     $class = $this->middlewareAliases[$name] ?? $name;
                     $resolved[] = [
@@ -228,9 +287,16 @@ class Router
     /**
      * Execute closures or Controller action mappings.
      */
-    protected function executeCallback(mixed $callback, array $params = []): mixed
+    protected function executeCallback(mixed $callback, array $params = [], string $routeKey = ''): mixed
     {
         if (is_callable($callback)) {
+            // Route params are keyed by placeholder name. Spreading a string-keyed
+            // array passes NAMED arguments, which fatals unless the closure happens
+            // to use identical parameter names — so only do that when the names
+            // actually line up, otherwise fall back to positional order.
+            if ($params !== [] && !$this->callbackAcceptsNamed($callback, $params, $routeKey)) {
+                $params = array_values($params);
+            }
             return call_user_func($callback, ...$params);
         }
 
@@ -242,14 +308,18 @@ class Router
                 throw new \InvalidArgumentException("Controller class [{$controllerClass}] does not exist.");
             }
 
+            // Verify the action BEFORE reflecting on attributes — otherwise a
+            // typo'd route surfaced as a raw ReflectionException instead of
+            // this explicit error.
+            if (!method_exists($controllerClass, $action)) {
+                throw new \BadMethodCallException("Method [{$action}] does not exist on controller [{$controllerClass}].");
+            }
+
             if (!$this->checkAuthorizationAttributes($controllerClass, $action)) {
                 return $this->response;
             }
-            
+
             $controller = Application::$app->container->make($controllerClass);
-            if (!method_exists($controller, $action)) {
-                throw new \BadMethodCallException("Method [{$action}] does not exist on controller [{$controllerClass}].");
-            }
 
             // Inspect action parameters for Request or FormRequest dependencies
             $reflection = new \ReflectionMethod($controllerClass, $action);
@@ -277,8 +347,17 @@ class Router
                     $actionArgs[] = $params[$name];
                 } elseif (!empty($params)) {
                     $actionArgs[] = array_shift($params);
+                } elseif ($parameter->isDefaultValueAvailable()) {
+                    $actionArgs[] = $parameter->getDefaultValue();
+                } elseif ($type === null || $parameter->allowsNull()) {
+                    $actionArgs[] = null;
                 } else {
-                    $actionArgs[] = $parameter->isDefaultValueAvailable() ? $parameter->getDefaultValue() : null;
+                    // Previously injected null here, surfacing as an opaque
+                    // TypeError deep inside the controller.
+                    throw new \InvalidArgumentException(
+                        "Route parameter [\${$name}] required by {$controllerClass}::{$action}() "
+                        . "was not supplied by the matched route pattern."
+                    );
                 }
             }
             
@@ -289,32 +368,91 @@ class Router
     }
 
     /**
+     * Do the callable's parameter names cover every route placeholder name?
+     * Reflection runs once per callback + placeholder set, then is memoised —
+     * this sits on the hot path of every dynamic route.
+     */
+    protected function callbackAcceptsNamed(callable $callback, array $params, string $routeKey = ''): bool
+    {
+        // The matched route is a stable, cheap cache key: one array lookup per
+        // request instead of rebuilding a signature string.
+        if ($routeKey !== '') {
+            return self::$namedArgCache[$routeKey] ??= $this->resolveAcceptsNamed($callback, $params);
+        }
+
+        $cacheKey = match (true) {
+            $callback instanceof \Closure => 'c' . spl_object_id($callback),
+            is_array($callback)           => (is_object($callback[0]) ? get_class($callback[0]) : (string) $callback[0]) . '::' . $callback[1],
+            is_string($callback)          => $callback,
+            default                       => 'o' . spl_object_id($callback),
+        } . '|' . implode(',', array_keys($params));
+
+        if (isset(self::$namedArgCache[$cacheKey])) {
+            return self::$namedArgCache[$cacheKey];
+        }
+
+        return self::$namedArgCache[$cacheKey] = $this->resolveAcceptsNamed($callback, $params);
+    }
+
+    /**
+     * Uncached reflection behind callbackAcceptsNamed().
+     */
+    private function resolveAcceptsNamed(callable $callback, array $params): bool
+    {
+        try {
+            $ref = $callback instanceof \Closure || is_string($callback)
+                ? new \ReflectionFunction($callback)
+                : new \ReflectionMethod(...(is_array($callback) ? $callback : [$callback, '__invoke']));
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        $names = [];
+        foreach ($ref->getParameters() as $p) {
+            $names[$p->getName()] = true;
+        }
+
+        foreach (array_keys($params) as $key) {
+            if (!isset($names[$key])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Scan and verify authorization attributes on the controller class and action method.
      */
     protected function checkAuthorizationAttributes(string $controllerClass, string $action): bool
     {
-        $classRef = new \ReflectionClass($controllerClass);
-        $methodRef = new \ReflectionMethod($controllerClass, $action);
+        // Reflection is expensive and the result never changes for a given
+        // class/method, so the requirement set is resolved once per process.
+        $cacheKey = $controllerClass . '::' . $action;
+        if (!isset(self::$authAttributeCache[$cacheKey])) {
+            $classRef  = new \ReflectionClass($controllerClass);
+            $methodRef = new \ReflectionMethod($controllerClass, $action);
 
-        // Fetch required roles
-        $requiredRoles = [];
-        $classRoleAttr = $classRef->getAttributes(\App\Core\Attributes\RequireRole::class);
-        $methodRoleAttr = $methodRef->getAttributes(\App\Core\Attributes\RequireRole::class);
+            $requiredRoles = [];
+            foreach (array_merge(
+                $classRef->getAttributes(\App\Core\Attributes\RequireRole::class),
+                $methodRef->getAttributes(\App\Core\Attributes\RequireRole::class)
+            ) as $attr) {
+                $requiredRoles = array_merge($requiredRoles, $attr->newInstance()->roles);
+            }
 
-        foreach (array_merge($classRoleAttr, $methodRoleAttr) as $attr) {
-            $instance = $attr->newInstance();
-            $requiredRoles = array_merge($requiredRoles, $instance->roles);
+            $requiredPermissions = [];
+            foreach (array_merge(
+                $classRef->getAttributes(\App\Core\Attributes\RequirePermission::class),
+                $methodRef->getAttributes(\App\Core\Attributes\RequirePermission::class)
+            ) as $attr) {
+                $requiredPermissions = array_merge($requiredPermissions, $attr->newInstance()->permissions);
+            }
+
+            self::$authAttributeCache[$cacheKey] = [$requiredRoles, $requiredPermissions];
         }
 
-        // Fetch required permissions
-        $requiredPermissions = [];
-        $classPermAttr = $classRef->getAttributes(\App\Core\Attributes\RequirePermission::class);
-        $methodPermAttr = $methodRef->getAttributes(\App\Core\Attributes\RequirePermission::class);
-
-        foreach (array_merge($classPermAttr, $methodPermAttr) as $attr) {
-            $instance = $attr->newInstance();
-            $requiredPermissions = array_merge($requiredPermissions, $instance->permissions);
-        }
+        [$requiredRoles, $requiredPermissions] = self::$authAttributeCache[$cacheKey];
 
         if (empty($requiredRoles) && empty($requiredPermissions)) {
             return true;
@@ -410,6 +548,7 @@ class Router
                 $this->routes = $data['routes'] ?? [];
                 $this->middlewareGroups = $data['middlewareGroups'] ?? [];
                 $this->csrfExclusions = $data['csrfExclusions'] ?? [];
+                $this->patternCache = [];
                 return true;
             }
         }
@@ -450,7 +589,20 @@ class Router
         ];
 
         $content = "<?php\n\n// Auto-generated route cache file\nreturn " . var_export($data, true) . ";\n";
-        file_put_contents($file, $content);
+
+        // Write atomically — a concurrent request must never `require` a
+        // half-written cache file.
+        $tmp = $file . '.' . getmypid() . '.tmp';
+        if (file_put_contents($tmp, $content, LOCK_EX) === false) {
+            return false;
+        }
+        if (!rename($tmp, $file)) {
+            @unlink($tmp);
+            return false;
+        }
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($file, true);
+        }
         return true;
     }
 }

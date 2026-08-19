@@ -29,21 +29,13 @@ class RateLimitMiddleware extends Middleware
         $path = $request->getPath();
         $key = 'rate_limit:' . md5($ip . ':' . $path);
 
-        $data = Cache::get($key);
-        $currentTime = time();
+        // Atomic increment — a get()/put() pair drops concurrent hits and lets
+        // parallel clients sail past the configured limit.
+        [$hits, $resetAt] = Cache::increment($key, $this->window);
 
-        if ($data === null || !is_array($data) || $currentTime >= $data['reset_at']) {
-            $hits = 1;
-            $resetAt = $currentTime + $this->window;
-        } else {
-            $hits = $data['hits'] + 1;
-            $resetAt = $data['reset_at'];
-        }
-
+        $currentTime  = time();
         $remainingTtl = max(1, $resetAt - $currentTime);
-        Cache::put($key, ['hits' => $hits, 'reset_at' => $resetAt], $remainingTtl);
-
-        $remaining = max(0, $this->limit - $hits);
+        $remaining    = max(0, $this->limit - $hits);
 
         $response->setHeader('X-RateLimit-Limit', (string) $this->limit);
         $response->setHeader('X-RateLimit-Remaining', (string) $remaining);

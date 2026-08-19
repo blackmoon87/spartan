@@ -101,6 +101,36 @@ class Cache
         return $value;
     }
 
+    /**
+     * Atomically increment a fixed-window counter.
+     * Returns [hits, reset_at]. Drivers that implement increment() do this
+     * atomically; others fall back to read-modify-write.
+     *
+     * @return array{0:int,1:int}
+     */
+    public static function increment(string $key, int $ttl, int $by = 1): array
+    {
+        $driver = self::driver();
+
+        if (method_exists($driver, 'increment')) {
+            return $driver->increment($key, $ttl, $by);
+        }
+
+        $now  = time();
+        $data = $driver->get($key);
+
+        if (!is_array($data) || !isset($data['hits'], $data['reset_at']) || $now >= $data['reset_at']) {
+            $hits    = $by;
+            $resetAt = $now + $ttl;
+        } else {
+            $hits    = (int) $data['hits'] + $by;
+            $resetAt = (int) $data['reset_at'];
+        }
+
+        $driver->put($key, ['hits' => $hits, 'reset_at' => $resetAt], max(1, $resetAt - $now));
+        return [$hits, $resetAt];
+    }
+
     private static function driver(): CacheDriverInterface
     {
         if (self::$driver === null) {

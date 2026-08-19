@@ -40,6 +40,29 @@ class QueryBuilder
     private ?int    $limitVal  = null;
     private ?int    $offsetVal = null;
 
+    /**
+     * Operators accepted by where() / orWhere() / having().
+     * Operators are interpolated into SQL (they cannot be bound), so anything
+     * outside this list is rejected rather than trusted.
+     */
+    private const ALLOWED_OPERATORS = [
+        '=' => true, '!=' => true, '<>' => true, '<' => true, '>' => true,
+        '<=' => true, '>=' => true, '<=>' => true,
+        'LIKE' => true, 'NOT LIKE' => true, 'ILIKE' => true,
+        'IN' => true, 'NOT IN' => true,
+        'IS' => true, 'IS NOT' => true,
+    ];
+
+    /**
+     * Compiled column expressions, shared process-wide and keyed by dialect.
+     * Column compilation is pure (same input + dialect = same SQL), so the
+     * whitelist regex runs once per distinct column instead of per query.
+     */
+    private static array $columnCache = [];
+
+    /** Cache bucket for this builder's dialect. */
+    private string $dialectKey;
+
     private array   $groupBys  = [];
     private array   $havings   = [];        // ['sql'=>string, 'value'=>mixed]
     private array   $havingBindings = [];
@@ -58,9 +81,11 @@ class QueryBuilder
 
         $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
         if ($driver === 'sqlite') {
-            $this->dialect = new SqliteDialect();
+            $this->dialect    = new SqliteDialect();
+            $this->dialectKey = 'sqlite';
         } else {
-            $this->dialect = new MysqlDialect();
+            $this->dialect    = new MysqlDialect();
+            $this->dialectKey = 'mysql';
         }
     }
 
@@ -180,7 +205,7 @@ class QueryBuilder
      */
     public function having(string $column, mixed $value, string $operator = '='): static
     {
-        $operator = strtoupper(trim($operator));
+        $operator = $this->normalizeOperator($operator);
         $col = $this->escapeColumn($column);
         $this->havings[]        = "{$col} {$operator} ?";
         $this->havingBindings[] = $value;
@@ -252,27 +277,8 @@ class QueryBuilder
             $page = 1;
         }
 
-        // COUNT query (respects wheres + joins + groupBy)
-        [$whereSQL, $bindings] = $this->buildWhere();
-
-        // Build JOIN clauses for count query
-        $joinSQL = '';
-        foreach ($this->joins as $join) {
-            $onClause = isset($join['raw']) && $join['raw'] !== null
-                ? $join['raw']
-                : "{$join['first']} {$join['operator']} {$join['second']}";
-            $joinSQL .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
-        }
-
-        if (!empty($this->groupBys)) {
-            // When GROUP BY is present, COUNT(*) returns per-group counts.
-            // Wrap in a subquery to count the number of groups instead.
-            $groupCols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->groupBys));
-            $innerSql  = "SELECT 1 FROM " . $this->dialect->quoteTable($this->table) . $joinSQL . $whereSQL . " GROUP BY {$groupCols}";
-            $countSql  = "SELECT COUNT(*) as cnt FROM ({$innerSql}) as _grouped";
-        } else {
-            $countSql = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table) . $joinSQL . $whereSQL;
-        }
+        // COUNT query (respects wheres + joins + groupBy + having)
+        [$countSql, $bindings] = $this->buildCount();
 
         $total = (int) ($this->execute($countSql, $bindings)->fetch(\PDO::FETCH_ASSOC)['cnt'] ?? 0);
 
@@ -304,9 +310,7 @@ class QueryBuilder
      */
     public function count(): int
     {
-        [$whereSQL, $bindings] = $this->buildWhere();
-        $sql  = "SELECT COUNT(*) as cnt FROM " . $this->dialect->quoteTable($this->table);
-        $sql .= $whereSQL;
+        [$sql, $bindings] = $this->buildCount();
         $stmt = $this->execute($sql, $bindings);
         return (int) ($stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0);
     }
@@ -414,7 +418,7 @@ class QueryBuilder
 
     private function addWhere(string $type, string $column, mixed $value, string $operator): static
     {
-        $operator = strtoupper(trim($operator));
+        $operator = $this->normalizeOperator($operator);
         $col = $this->escapeColumn($column);
 
         // Handle IN / NOT IN with array values
@@ -432,21 +436,81 @@ class QueryBuilder
         return $this;
     }
 
-    private function buildSelect(): array
+    /**
+     * Validate and normalise a comparison operator.
+     */
+    private function normalizeOperator(string $operator): string
     {
-        $cols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->selects));
-        [$whereSQL, $bindings] = $this->buildWhere();
+        $normalized = strtoupper(trim($operator));
+        // Collapse internal whitespace so 'NOT  IN' matches 'NOT IN'.
+        if (str_contains($normalized, ' ')) {
+            $normalized = preg_replace('/\s+/', ' ', $normalized);
+        }
 
-        $sql  = "SELECT {$cols} FROM " . $this->dialect->quoteTable($this->table);
+        if (!isset(self::ALLOWED_OPERATORS[$normalized])) {
+            throw new RuntimeException(
+                "Unsupported SQL operator [{$operator}]. Allowed: "
+                . implode(', ', array_keys(self::ALLOWED_OPERATORS)) . '.'
+            );
+        }
 
-        // Append JOIN clauses
+        return $normalized;
+    }
+
+    /**
+     * Build the JOIN fragment shared by SELECT and COUNT queries.
+     */
+    private function buildJoins(): string
+    {
+        if ($this->joins === []) {
+            return '';
+        }
+
+        $sql = '';
         foreach ($this->joins as $join) {
             $onClause = isset($join['raw']) && $join['raw'] !== null
                 ? $join['raw']
                 : "{$join['first']} {$join['operator']} {$join['second']}";
             $sql .= " {$join['type']} JOIN " . $this->dialect->quoteTable($join['table']) . " ON {$onClause}";
         }
+        return $sql;
+    }
 
+    /**
+     * Build a COUNT query that respects wheres, joins, groupBy and having.
+     *
+     * @return array{0:string,1:array}
+     */
+    private function buildCount(): array
+    {
+        [$whereSQL, $bindings] = $this->buildWhere();
+        $joinSQL = $this->buildJoins();
+        $table   = $this->dialect->quoteTable($this->table);
+
+        if (empty($this->groupBys)) {
+            return ["SELECT COUNT(*) as cnt FROM {$table}{$joinSQL}{$whereSQL}", $bindings];
+        }
+
+        // With GROUP BY, COUNT(*) returns per-group counts — wrap it so we
+        // count the number of groups instead.
+        $groupCols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->groupBys));
+        $innerSql  = "SELECT 1 FROM {$table}{$joinSQL}{$whereSQL} GROUP BY {$groupCols}";
+
+        if (!empty($this->havings)) {
+            $innerSql .= ' HAVING ' . implode(' AND ', $this->havings);
+            $bindings  = array_merge($bindings, $this->havingBindings);
+        }
+
+        return ["SELECT COUNT(*) as cnt FROM ({$innerSql}) as _grouped", $bindings];
+    }
+
+    private function buildSelect(): array
+    {
+        $cols = implode(', ', array_map(fn($c) => $this->escapeColumn($c), $this->selects));
+        [$whereSQL, $bindings] = $this->buildWhere();
+
+        $sql  = "SELECT {$cols} FROM " . $this->dialect->quoteTable($this->table);
+        $sql .= $this->buildJoins();
         $sql .= $whereSQL;
 
         if (!empty($this->groupBys)) {
@@ -489,8 +553,34 @@ class QueryBuilder
     private function execute(string $sql, array $bindings): \PDOStatement
     {
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($bindings);
+        self::bindTyped($stmt, $bindings);
+        $stmt->execute();
         return $stmt;
+    }
+
+    /**
+     * Bind values with their native PDO types.
+     *
+     * PDO binds everything as a string by default. Column affinity hides that
+     * for ordinary WHERE clauses, but expressions without affinity — HAVING on
+     * an aggregate alias, for instance — then compare an integer against the
+     * TEXT '1' and silently return the wrong rows.
+     */
+    public static function bindTyped(\PDOStatement $stmt, array $bindings): void
+    {
+        $position = 1;
+        foreach ($bindings as $value) {
+            $type = match (true) {
+                is_int($value)  => PDO::PARAM_INT,
+                is_bool($value) => PDO::PARAM_BOOL,
+                is_null($value) => PDO::PARAM_NULL,
+                default         => PDO::PARAM_STR,
+            };
+            if (is_float($value)) {
+                $value = (string) $value; // PDO has no PARAM_FLOAT
+            }
+            $stmt->bindValue($position++, $value, $type);
+        }
     }
 
     /**
@@ -500,23 +590,59 @@ class QueryBuilder
      */
     private function escapeColumn(string $column): string
     {
+        return self::$columnCache[$this->dialectKey][$column] ??= $this->compileColumn($column);
+    }
+
+    /**
+     * Compile a single column expression into safely quoted SQL.
+     *
+     * Aggregate expressions used to be passed through RAW, which made any
+     * caller-supplied column name (e.g. an ?sort= parameter) an injection
+     * vector. They are now matched against a strict whitelist grammar instead.
+     */
+    private function compileColumn(string $column): string
+    {
         $column = trim($column);
         if ($column === '*' || $column === '') {
             return $column;
         }
 
         if (str_contains($column, '(') || str_contains($column, ')')) {
-            return $column;
+            // Allowed shape: FUNC(args) [AS alias] — args restricted to
+            // identifiers, dots, commas, digits, '*' and quoted literals.
+            if (preg_match(
+                '/^([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*((?:DISTINCT\s+)?[A-Za-z0-9_.,*\s\x27"%+-]*)\)(?:\s+as\s+([A-Za-z0-9_]+))?$/i',
+                $column,
+                $m
+            )) {
+                $sql = $m[1] . '(' . trim($m[2]) . ')';
+                if (isset($m[3]) && $m[3] !== '') {
+                    $sql .= ' AS ' . $this->dialect->quoteIdentifier($m[3]);
+                }
+                return $sql;
+            }
+
+            throw new RuntimeException(
+                "Unsafe column expression [{$column}]. Only simple identifiers and "
+                . "FUNC(col) [AS alias] expressions are accepted."
+            );
         }
 
         // Handle alias: "users.id as user_id" -> "`users`.`id` AS `user_id`"
         if (preg_match('/\s+as\s+/i', $column)) {
             $parts = preg_split('/\s+as\s+/i', $column);
-            return $this->escapeColumn($parts[0]) . ' AS ' . $this->escapeColumn($parts[1]);
+            return $this->compileColumn($parts[0]) . ' AS ' . $this->compileColumn($parts[1]);
+        }
+
+        if (!preg_match('/^[A-Za-z0-9_.*\s]+$/', $column)) {
+            throw new RuntimeException(
+                "Unsafe column name [{$column}]. Column names may only contain "
+                . "letters, digits, underscores and dots."
+            );
         }
 
         $parts = explode('.', $column);
-        $escaped = array_map(fn($p) => $p === '*' ? '*' : $this->dialect->quoteIdentifier($p), $parts);
+        $escaped = array_map(fn($p) => $p === '*' ? '*' : $this->dialect->quoteIdentifier(trim($p)), $parts);
         return implode('.', $escaped);
     }
 }

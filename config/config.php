@@ -49,6 +49,12 @@ return [
         'env' => $_ENV['APP_ENV'] ?? 'production',
         'debug' => ($_ENV['APP_DEBUG'] ?? 'false') === 'true',
         'url' => $_ENV['APP_URL'] ?? 'http://localhost:8000',
+        // Comma-separated proxy IPs/CIDRs allowed to set X-Forwarded-For.
+        // Leave empty unless this app really sits behind a load balancer.
+        'trusted_proxies' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) ($_ENV['TRUSTED_PROXIES'] ?? ''))
+        ), fn(string $p): bool => $p !== '')),
     ],
     'db' => [
         'connection' => $_ENV['DB_CONNECTION'] ?? 'mysql',

@@ -72,4 +72,27 @@ class RedisCacheDriver implements CacheDriverInterface
     {
         $this->redis->flushDb();
     }
+
+    /**
+     * Atomic counter increment backed by Redis INCR.
+     *
+     * @return array{0:int,1:int} [hits, reset_at]
+     */
+    public function increment(string $key, int $ttl, int $by = 1): array
+    {
+        $counter = $key . ':counter';
+        $hits    = (int) $this->redis->incrBy($counter, $by);
+
+        if ($hits === $by) {
+            // First hit in this window — start the expiry clock.
+            $this->redis->expire($counter, $ttl);
+            $resetAt = time() + $ttl;
+            $this->redis->setEx($key . ':reset', $ttl, (string) $resetAt);
+        } else {
+            $stored  = $this->redis->get($key . ':reset');
+            $resetAt = $stored !== false ? (int) $stored : time() + max(1, (int) $this->redis->ttl($counter));
+        }
+
+        return [$hits, $resetAt];
+    }
 }

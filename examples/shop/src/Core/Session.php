@@ -10,6 +10,16 @@ class Session implements SessionInterface
 
     public function __construct(?Request $request = null)
     {
+        $this->start($request);
+    }
+
+    /**
+     * Start (or resume) the session for the current request.
+     * Idempotent — safe to call once per request in worker mode, where a single
+     * Session object is reused across many requests.
+     */
+    public function start(?Request $request = null): void
+    {
         if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             // Harden the session cookie before starting the session:
             //   HttpOnly  — JavaScript (document.cookie) cannot read the session ID
@@ -74,10 +84,25 @@ class Session implements SessionInterface
 
 
     /**
+     * Persist and close the session, releasing its lock.
+     * Required in worker mode so the next request re-reads its own session
+     * instead of inheriting the previous one.
+     */
+    public function close(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
+    /**
      * Clear marked flash messages at the end of request lifecycle.
      */
     public function removeFlashMessages(): void
     {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return;
+        }
         $flashMessages = $_SESSION[self::FLASH_KEY] ?? [];
         foreach ($flashMessages as $key => $flashMessage) {
             if ($flashMessage['remove']) {
